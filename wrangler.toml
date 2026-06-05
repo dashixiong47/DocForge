@@ -8,7 +8,7 @@ enabled = true
 
 [[d1_databases]]
 binding = "DB"
-database_name = "ue5-docs"
+database_name = "docforge-db"
 database_id = "local-dev"
 
 [[r2_buckets]]

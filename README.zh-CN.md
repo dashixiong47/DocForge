@@ -38,9 +38,7 @@
 npm install
 
 # 2. 初始化数据库
-npx wrangler d1 execute docforge-db --local --file=./migrations/0001_initial.sql
-npx wrangler d1 execute docforge-db --local --file=./migrations/0002_translations.sql
-npx wrangler d1 execute docforge-db --local --file=./migrations/0003_media_placeholder_key.sql
+npm run db:init
 
 # 3. 启动开发服务器
 npm run dev
