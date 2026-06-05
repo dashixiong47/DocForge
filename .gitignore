@@ -26,6 +26,9 @@ Thumbs.db
 # Build output
 public/theme.css
 
+# Local data / import scripts
+scripts/
+
 # Sensitive local config overrides
 .env
 .env.local
