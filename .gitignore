@@ -1,0 +1,32 @@
+node_modules/
+dist/
+.wrangler/
+
+# local dev data
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+
+# temp files
+*.tmp
+cookies.txt
+fix_backticks.mjs
+rebuild_editor.mjs
+fix_all.mjs
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Build output
+public/theme.css
+
+# Sensitive local config overrides
+.env
+.env.local
+wrangler.local.toml

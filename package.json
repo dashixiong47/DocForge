@@ -1,0 +1,29 @@
+{
+  "name": "ue5-plugin-docs",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute ue5-docs --local --file=./migrations/0001_initial.sql && wrangler d1 execute ue5-docs --local --file=./migrations/0002_translations.sql && wrangler d1 execute ue5-docs --local --file=./migrations/0003_media_placeholder_key.sql",
+    "db:seed": "wrangler d1 execute ue5-docs --local --file=./scripts/seed.sql",
+    "db:content": "wrangler d1 execute ue5-docs --local --file=./scripts/content_seed.sql",
+    "db:setup": "npm run db:init && npm run db:webuix",
+    "db:webuix": "wrangler d1 execute ue5-docs --local --file=./scripts/webuix_content.sql",
+    "db:import": "tsx scripts/import-content.ts",
+    "d1:remote": "wrangler d1 execute ue5-docs --remote --file=./migrations/0001_initial.sql",
+    "generate": "drizzle-kit generate",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.38.3",
+    "hono": "^4.6.14"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250303.0",
+    "drizzle-kit": "^0.30.4",
+    "playwright": "^1.60.0",
+    "typescript": "^5.7.3",
+    "wrangler": "^3.109.1"
+  }
+}

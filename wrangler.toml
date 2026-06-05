@@ -1,0 +1,26 @@
+name = "docforge"
+main = "src/index.ts"
+compatibility_date = "2025-03-03"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ue5-docs"
+database_id = "local-dev"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "ue5-docs-media"
+
+[vars]
+JWT_SECRET = "change-me-in-production"
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "change-me"
+SITE_TITLE = "DocForge"
+SITE_DOMAIN = ""
+
+[dev]
+port = 8787
