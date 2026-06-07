@@ -5,11 +5,14 @@ export const plugins = sqliteTable('plugins', {
   slug: text('slug').notNull().unique(),
   name: text('name').notNull(),
   version: text('version').notNull().default('1.0.0'),
-  ueVersion: text('ue_version').notNull().default('5.0+'),
+  compatibility: text('compatibility').notNull().default(''),
   description: text('description').default(''),
   iconUrl: text('icon_url').default(''),
   badgeTags: text('badge_tags').default('[]'),
   sortOrder: integer('sort_order').notNull().default(0),
+  enabled: integer('enabled').notNull().default(0),
+  customCss: text('custom_css').default(''),
+  customJs:  text('custom_js').default(''),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
@@ -71,6 +74,29 @@ export const admins = sqliteTable('admins', {
   createdAt: text('created_at').notNull(),
 });
 
+export const extensions = sqliteTable('extensions', {
+  id:           integer('id').primaryKey({ autoIncrement: true }),
+  slug:         text('slug').notNull().unique(),
+  name:         text('name').notNull(),
+  description:  text('description').notNull().default(''),
+  version:      text('version').notNull().default('1.0.0'),
+  author:       text('author').notNull().default(''),
+  icon:         text('icon').notNull().default('🧩'),
+  homepage:     text('homepage').notNull().default(''),
+  extType:      text('ext_type').notNull().default('general'),
+  enabled:      integer('enabled').notNull().default(1),
+  css:          text('css').notNull().default(''),
+  js:           text('js').notNull().default(''),
+  headHtml:     text('head_html').notNull().default(''),
+  blockTypes:   text('block_types').notNull().default('[]'),
+  tags:         text('tags').notNull().default('[]'),
+  i18n:         text('i18n').notNull().default('{}'),
+  configSchema: text('config_schema').notNull().default('{}'),
+  config:       text('config').notNull().default('{}'),
+  createdAt:    text('created_at').notNull(),
+  updatedAt:    text('updated_at').notNull(),
+});
+
 export const translations = sqliteTable('translations', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   pluginId: integer('plugin_id').notNull().references(() => plugins.id, { onDelete: 'cascade' }),
@@ -80,4 +106,19 @@ export const translations = sqliteTable('translations', {
   updatedAt: text('updated_at').notNull(),
 }, (t) => ({
   uniq: index('idx_translations_uniq').on(t.pluginId, t.key, t.locale),
+}));
+
+export const analyticsEvents = sqliteTable('analytics_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  pluginId: integer('plugin_id').notNull().references(() => plugins.id, { onDelete: 'cascade' }),
+  pluginSlug: text('plugin_slug').notNull(),
+  path: text('path').notNull().default(''),
+  ip: text('ip').notNull().default(''),
+  country: text('country').notNull().default(''),
+  userAgent: text('user_agent').notNull().default(''),
+  createdAt: text('created_at').notNull(),
+}, (t) => ({
+  createdIdx: index('idx_analytics_events_created').on(t.createdAt),
+  pluginIdx: index('idx_analytics_events_plugin').on(t.pluginId, t.createdAt),
+  countryIdx: index('idx_analytics_events_country').on(t.country, t.createdAt),
 }));

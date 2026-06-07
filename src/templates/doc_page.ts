@@ -1,9 +1,51 @@
 import { docThemeCSS } from './error_pages';
 
+// Client-side plugin runtime — injected once per page when extensions are active.
+// Plugins are wrapped: (function(config, t){ ... })(cfg, DocForge.createT(slug))
+// t('key') returns translated text for the extension's own i18n strings.
+// DOMContentLoaded triggers _run(): renders ext-block placeholders and calls onLoad hooks.
+const DOCFORGE_RUNTIME = `window.DocForge=(function(){
+var _lang=(document.cookie.match(/(?:^|;\\s*)lang=([^;]+)/)||[])[1]||document.documentElement.lang||'zh';
+var _i18n={};
+var _media={};
+var _docTrans={};
+var R={};
+function createT(id){return function(key){var m=_i18n[id];return m&&m[key]?(m[key][_lang]||m[key].zh||key):key;};}
+function getMedia(key){return _media[key]||'';}
+// docT: read from current plugin's translations (injected at SSR time).
+// Use this in extension JS for document-specific strings (NOT extension UI strings).
+// Extension UI strings → t('key');  Document content → DocForge.docT('key')
+function docT(key){return _docTrans[key]||key;}
+function run(){
+// 1. renderTags: replace custom HTML tags registered by extensions
+Object.keys(R).forEach(function(id){var p=R[id];
+if(!p.renderTags)return;
+var t=createT(id);
+Object.keys(p.renderTags).forEach(function(tag){var fn=p.renderTags[tag];
+var els=Array.from(document.querySelectorAll(tag));
+els.forEach(function(el,idx){
+try{var tmp=document.createElement('div');tmp.innerHTML=fn(el,_lang,t,idx);
+var node=tmp.firstElementChild;if(node)el.parentNode.replaceChild(node,el);
+}catch(e){console.error('[DocForge] renderTags['+tag+'] error:',e);}
+});});});
+// 2. renderBlock: replace .ext-block placeholders (legacy JSON blocks)
+Object.keys(R).forEach(function(id){var p=R[id];
+if(p.renderBlock){Object.keys(p.renderBlock).forEach(function(type){var fn=p.renderBlock[type];
+document.querySelectorAll('.ext-block[data-type="'+type+'"]').forEach(function(el){
+var d={};try{d=JSON.parse(el.getAttribute('data-content')||'{}');}catch(e){}
+var lang=el.getAttribute('data-lang')||_lang;
+try{el.innerHTML=fn(d,lang);}catch(e){console.error('[DocForge] renderBlock['+type+'] error:',e);}
+});});}
+if(p.onLoad){try{p.onLoad();}catch(e){console.error('[DocForge] '+id+' onLoad error:',e);}}
+});}
+function getTagSchemas(){var s={};Object.keys(R).forEach(function(id){var p=R[id];if(p.tagSchema)Object.assign(s,p.tagSchema);});return s;}
+return{_i18n:_i18n,_media:_media,_docTrans:_docTrans,register:function(opts){if(opts&&opts.id)R[opts.id]=opts;},createT:createT,t:function(id,key){return createT(id)(key);},media:getMedia,docT:docT,_run:run,getTagSchemas:getTagSchemas};
+})();document.addEventListener('DOMContentLoaded',function(){window.DocForge._run();});`;
+
 interface Plugin {
   id: number; slug: string; name: string; version: string;
-  ueVersion: string; description: string | null; iconUrl: string | null;
-  badgeTags: string | null; sortOrder: number;
+  compatibility: string; description: string | null; iconUrl: string | null;
+  badgeTags: string | null; sortOrder: number; customCss?: string | null;
 }
 
 interface Section {
@@ -17,21 +59,173 @@ interface ContentBlock {
   contentJson: string; sortOrder: number;
 }
 
-// translations: key → {zh, en}
-export type TranslationsMap = Map<string, { zh: string; en: string }>;
+interface CardData {
+  titleZh?: string; titleEn?: string;
+  textZh?: string; textEn?: string;
+  titleKey?: string; textKey?: string;
+}
+
+interface ListData {
+  ordered?: boolean;
+  items?: Array<string | { zh: string; en: string } | { key: string }>;
+}
+
+// Locale display info (mirrors i18n.ts LOCALES — kept inline so doc_page has no service import)
+const LOCALE_INFO: Record<string, { name: string; country: string }> = {
+  // East Asia
+  'zh':    { name: '中文 (简体)',        country: 'cn'     },
+  'zh-TW': { name: '中文 (繁體)',        country: 'tw'     },
+  'ja':    { name: '日本語',             country: 'jp'     },
+  'ko':    { name: '한국어',             country: 'kr'     },
+  'mn':    { name: 'Монгол',             country: 'mn'     },
+  // Southeast Asia
+  'id':    { name: 'Bahasa Indonesia',   country: 'id'     },
+  'ms':    { name: 'Bahasa Melayu',      country: 'my'     },
+  'tl':    { name: 'Filipino',           country: 'ph'     },
+  'vi':    { name: 'Tiếng Việt',         country: 'vn'     },
+  'th':    { name: 'ภาษาไทย',            country: 'th'     },
+  'km':    { name: 'ភាសាខ្មែរ',          country: 'kh'     },
+  'lo':    { name: 'ພາສາລາວ',            country: 'la'     },
+  'my':    { name: 'မြန်မာဘာသာ',         country: 'mm'     },
+  // South Asia
+  'hi':    { name: 'हिन्दी',              country: 'in'     },
+  'bn':    { name: 'বাংলা',              country: 'bd'     },
+  'ur':    { name: 'اردو',               country: 'pk'     },
+  'ne':    { name: 'नेपाली',             country: 'np'     },
+  'si':    { name: 'සිංහල',              country: 'lk'     },
+  'ta':    { name: 'தமிழ்',              country: 'sg'     },
+  // Middle East & Central Asia
+  'ar':    { name: 'العربية',            country: 'sa'     },
+  'fa':    { name: 'فارسی',              country: 'ir'     },
+  'he':    { name: 'עברית',              country: 'il'     },
+  'ps':    { name: 'پښتو',               country: 'af'     },
+  'tr':    { name: 'Türkçe',             country: 'tr'     },
+  'az':    { name: 'Azərbaycan',         country: 'az'     },
+  'kk':    { name: 'Қазақша',            country: 'kz'     },
+  'uz':    { name: "O'zbek",             country: 'uz'     },
+  'ky':    { name: 'Кыргызча',           country: 'kg'     },
+  'tg':    { name: 'Тоҷикӣ',             country: 'tj'     },
+  'tk':    { name: 'Türkmen',            country: 'tm'     },
+  // Caucasus
+  'ka':    { name: 'ქართული',            country: 'ge'     },
+  'hy':    { name: 'Հայերեն',            country: 'am'     },
+  // Western Europe
+  'en':    { name: 'English',            country: 'us'     },
+  'de':    { name: 'Deutsch',            country: 'de'     },
+  'fr':    { name: 'Français',           country: 'fr'     },
+  'es':    { name: 'Español',            country: 'es'     },
+  'pt':    { name: 'Português',          country: 'br'     },
+  'it':    { name: 'Italiano',           country: 'it'     },
+  'nl':    { name: 'Nederlands',         country: 'nl'     },
+  'sv':    { name: 'Svenska',            country: 'se'     },
+  'da':    { name: 'Dansk',              country: 'dk'     },
+  'fi':    { name: 'Suomi',              country: 'fi'     },
+  'no':    { name: 'Norsk',              country: 'no'     },
+  'is':    { name: 'Íslenska',           country: 'is'     },
+  'ca':    { name: 'Català',             country: 'ad'     },
+  'ga':    { name: 'Gaeilge',            country: 'ie'     },
+  'cy':    { name: 'Cymraeg',            country: 'gb-wls' },
+  'mt':    { name: 'Malti',              country: 'mt'     },
+  'lb':    { name: 'Lëtzebuergesch',     country: 'lu'     },
+  // Eastern Europe
+  'ru':    { name: 'Русский',            country: 'ru'     },
+  'uk':    { name: 'Українська',         country: 'ua'     },
+  'pl':    { name: 'Polski',             country: 'pl'     },
+  'cs':    { name: 'Čeština',            country: 'cz'     },
+  'sk':    { name: 'Slovenčina',         country: 'sk'     },
+  'ro':    { name: 'Română',             country: 'ro'     },
+  'hu':    { name: 'Magyar',             country: 'hu'     },
+  'bg':    { name: 'Български',          country: 'bg'     },
+  'hr':    { name: 'Hrvatski',           country: 'hr'     },
+  'sr':    { name: 'Српски',             country: 'rs'     },
+  'sl':    { name: 'Slovenščina',        country: 'si'     },
+  'mk':    { name: 'Македонски',         country: 'mk'     },
+  'sq':    { name: 'Shqip',              country: 'al'     },
+  'be':    { name: 'Беларуская',         country: 'by'     },
+  'el':    { name: 'Ελληνικά',           country: 'gr'     },
+  // Baltic
+  'lt':    { name: 'Lietuvių',           country: 'lt'     },
+  'lv':    { name: 'Latviešu',           country: 'lv'     },
+  'et':    { name: 'Eesti',              country: 'ee'     },
+  // Africa
+  'sw':    { name: 'Kiswahili',          country: 'ke'     },
+  'am':    { name: 'አማርኛ',              country: 'et'     },
+  'yo':    { name: 'Yorùbá',             country: 'ng'     },
+  'ha':    { name: 'Hausa',              country: 'ng'     },
+  'ig':    { name: 'Igbo',               country: 'ng'     },
+  'af':    { name: 'Afrikaans',          country: 'za'     },
+  'zu':    { name: 'isiZulu',            country: 'za'     },
+  'so':    { name: 'Soomaali',           country: 'so'     },
+  'rw':    { name: 'Kinyarwanda',        country: 'rw'     },
+  'mg':    { name: 'Malagasy',           country: 'mg'     },
+};
+
+function localeName(code: string): string {
+  return LOCALE_INFO[code]?.name || code;
+}
+
+function localeCountry(code: string): string {
+  return LOCALE_INFO[code]?.country || code;
+}
+
+// CSS flag-icons span — works cross-platform (SVG, no emoji font dependency)
+function flagSpan(code: string): string {
+  return `<span class="fi fi-${localeCountry(code)}"></span>`;
+}
+
+// Static UI strings for doc page chrome — extend per locale as needed
+const DOC_UI: Record<string, Record<string, string>> = {
+  'nav.docs':        { zh: '文档',     en: 'Docs' },
+  'main.empty':      { zh: '暂无文档内容', en: 'No documentation yet.' },
+  'home.noPlugins':  { zh: '暂无插件',  en: 'No plugins yet.' },
+  'home.enterAdmin': { zh: '进入管理后台', en: 'Go to admin panel' },
+};
+
+function docUI(key: string, lang: string): string {
+  return DOC_UI[key]?.[lang] || DOC_UI[key]?.['zh'] || DOC_UI[key]?.['en'] || key;
+}
+
+// key → { locale → value }  (supports any number of locales)
+export type TranslationsMap = Map<string, Record<string, string>>;
 
 // media: placeholderKey → {url, alt, mimeType}
 export type MediaMap = Map<string, { url: string; alt: string; mimeType: string }>;
 
-function applyI18n(html: string, t: TranslationsMap): string {
+// Lightbox HTML + CSS + JS — injected once into docLayout
+const LIGHTBOX = `
+<div id="lb-ov" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:zoom-out" onclick="this.style.display='none'">
+  <img id="lb-img" src="" alt="" style="max-width:92vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain">
+  <button onclick="event.stopPropagation();lbPrev()" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:50%;width:42px;height:42px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">‹</button>
+  <button onclick="event.stopPropagation();lbNext()" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:50%;width:42px;height:42px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">›</button>
+  <button onclick="document.getElementById('lb-ov').style.display='none'" style="position:absolute;top:14px;right:18px;background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:50%;width:36px;height:36px;font-size:20px;cursor:pointer">✕</button>
+</div>
+<script>
+var _lbImgs=[],_lbIdx=0;
+function lbOpen(imgs,i){_lbImgs=imgs;_lbIdx=i;var ov=document.getElementById('lb-ov');ov.style.display='flex';document.getElementById('lb-img').src=imgs[i];}
+function lbPrev(){_lbIdx=(_lbIdx-1+_lbImgs.length)%_lbImgs.length;document.getElementById('lb-img').src=_lbImgs[_lbIdx];}
+function lbNext(){_lbIdx=(_lbIdx+1)%_lbImgs.length;document.getElementById('lb-img').src=_lbImgs[_lbIdx];}
+document.addEventListener('keydown',function(e){
+  var ov=document.getElementById('lb-ov');
+  if(ov.style.display==='flex'){if(e.key==='ArrowLeft')lbPrev();else if(e.key==='ArrowRight')lbNext();else if(e.key==='Escape')ov.style.display='none';}
+});
+// Make all content images clickable
+document.addEventListener('DOMContentLoaded',function(){
+  var imgs=Array.from(document.querySelectorAll('.content img'));
+  var srcs=imgs.map(function(i){return i.src;});
+  imgs.forEach(function(img,idx){
+    img.style.cursor='zoom-in';
+    img.addEventListener('click',function(){lbOpen(srcs,idx);});
+  });
+});
+</script>`;
+
+// SSR: replace {{t:key}} with the text for the current lang
+function applyI18n(html: string, t: TranslationsMap, lang: string): string {
   return html.replace(/\{\{t:([^}]+)\}\}/g, (match, rawKey) => {
     const key = rawKey.trim();
     const entry = t.get(key);
     if (!entry) return match;
-    const zh = entry.zh || entry.en || match;
-    const en = entry.en || entry.zh || match;
-    if (zh === en) return zh;
-    return `<span data-lang="zh">${zh}</span><span data-lang="en">${en}</span>`;
+    return entry[lang] || entry['zh'] || entry['en'] || Object.values(entry)[0] || match;
   });
 }
 
@@ -49,41 +243,104 @@ function applyPlaceholders(html: string, mediaMap: MediaMap): string {
     });
 }
 
+function faviconLink(icon: string): string {
+  const raw = (icon || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) {
+    return `<link rel="icon" href="${esc(raw)}">`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="52">${raw}</text></svg>`;
+  return `<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(svg)}">`;
+}
+
+// Resolve a translation key to text for the current lang, with zh/en fallback
+function resolve(t: TranslationsMap, key: string, lang: string, fallback = ''): string {
+  const entry = t.get(key);
+  if (!entry) return fallback || key;
+  return entry[lang] || entry['zh'] || entry['en'] || fallback || key;
+}
+
+// Resolve section title: prefer DB translation key, then schema fields, then slug
+function sectionTitle(s: Section, t: TranslationsMap, lang: string): string {
+  const key = `sec.${s.slug}.title`;
+  const entry = t.get(key);
+  if (entry) return entry[lang] || entry['zh'] || entry['en'] || s.slug;
+  // Fallback to schema fields (titleZh / titleEn)
+  if (lang === 'en') return s.titleEn || s.titleZh || s.slug;
+  return s.titleZh || s.titleEn || s.slug;
+}
+
 export function docLayout(params: {
   plugin: Plugin;
   sections: Section[];
   blocksBySection: Map<number, ContentBlock[]>;
   settings: Record<string, string>;
-  lang: 'zh' | 'en';
+  lang: string;
   translations: TranslationsMap;
   mediaMap?: MediaMap;
+  availableLocales?: string[];
+  extHeadHtml?: string;
+  extScriptsHtml?: string;
+  extI18nHtml?: string;
+  extMediaHtml?: string;
+  extDocTransHtml?: string;
 }): string {
-  const { plugin, sections, blocksBySection, settings, lang, translations, mediaMap = new Map() } = params;
+  const { plugin, sections, blocksBySection, settings, lang, translations, mediaMap = new Map(), availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extDocTransHtml = '' } = params;
   const badgeTags = JSON.parse(plugin.badgeTags || '[]') as string[];
-  const htmlLang = lang === 'zh' ? 'zh-CN' : 'en';
+  const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
 
   return `<!doctype html>
-<html lang="${htmlLang}" class="lang-${lang}">
+<html lang="${htmlLang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(plugin.name)} ${lang === 'zh' ? '文档' : 'Docs'}</title>
+<title>${esc(plugin.name)} ${docUI('nav.docs', lang)}</title>
+${faviconLink(plugin.iconUrl || '')}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
 ${settings.custom_head_html || ''}
-${docThemeCSS()}
-${settings.custom_css ? `<style>${settings.custom_css}</style>` : ''}
+${settings.custom_css ? `<style>${settings.custom_css}</style>` : docThemeCSS()}
+${extHeadHtml}
+${plugin.customCss ? `<style>/* doc: ${esc(plugin.slug)} */\n${plugin.customCss}</style>` : ''}
+${extHeadHtml || extScriptsHtml ? `<script>${DOCFORGE_RUNTIME}</script>` : ''}
+${extI18nHtml}
+${extMediaHtml}
+${extDocTransHtml}
+<style>
+.doc-lp{position:relative;display:inline-block}
+.doc-lp-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-surface);color:var(--c-text);cursor:pointer;font:inherit;font-size:13px;white-space:nowrap}
+.doc-lp-btn:hover{border-color:var(--c-accent)}
+.doc-lp-menu{position:absolute;right:0;top:calc(100% + 6px);min-width:180px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:8px;z-index:999;list-style:none;margin:0;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none}
+.doc-lp-menu.open{display:block}
+.doc-lp-menu li{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:14px}
+.doc-lp-menu li:hover{background:rgba(88,166,255,.08);color:var(--c-accent)}
+.doc-lp-menu li.active{color:var(--c-accent);font-weight:600}
+</style>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.lang-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var lang = btn.dataset.switchLang;
-        document.documentElement.className = 'lang-' + lang;
-        document.querySelectorAll('.lang-btn').forEach(function(b) {
-          b.classList.toggle('active', b.dataset.switchLang === lang);
+    // Lang picker
+    var dlpBtn=document.getElementById('doc-lp-btn');
+    var dlpMenu=document.getElementById('doc-lp-menu');
+    if(dlpBtn&&dlpMenu){
+      dlpBtn.addEventListener('click',function(e){e.stopPropagation();dlpMenu.classList.toggle('open');});
+      document.addEventListener('click',function(){dlpMenu.classList.remove('open');});
+      dlpMenu.querySelectorAll('li').forEach(function(li){
+        li.addEventListener('click',function(){
+          fetch('/api/set-lang?lang='+li.dataset.code).then(function(){location.reload();});
         });
-        fetch('/api/set-lang?lang=' + lang);
       });
-    });
-    // Track which section is most visible for scroll-based active state
+    }
+
+    window.switchDocLang = function(lang) {
+      fetch('/api/set-lang?lang=' + lang).then(function() { location.reload(); });
+    };
+    window.docImgErr = function(el) {
+      var alt = el.getAttribute('alt') || '';
+      var ph = document.createElement('div');
+      ph.className = 'img-ph';
+      ph.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+        + (alt ? '<span>' + alt + '</span>' : '');
+      if (el.parentNode) el.parentNode.replaceChild(ph, el);
+    };
     var tocLinks = Array.from(document.querySelectorAll('.toc-link[href^="#"]'));
     var sectionEls = tocLinks.map(function(l) {
       return document.getElementById(l.getAttribute('href').slice(1));
@@ -91,12 +348,10 @@ ${settings.custom_css ? `<style>${settings.custom_css}</style>` : ''}
 
     function setActiveToc(id) {
       tocLinks.forEach(function(l) {
-        var active = l.getAttribute('href') === '#' + id;
-        l.classList.toggle('active', active);
+        l.classList.toggle('active', l.getAttribute('href') === '#' + id);
       });
     }
 
-    // Click: smooth scroll + immediate active
     tocLinks.forEach(function(link) {
       link.addEventListener('click', function(e) {
         var target = document.getElementById(link.getAttribute('href').slice(1));
@@ -108,7 +363,6 @@ ${settings.custom_css ? `<style>${settings.custom_css}</style>` : ''}
       });
     });
 
-    // Scroll: update active based on scroll position
     function onScroll() {
       var marker = window.scrollY + Math.min(100, window.innerHeight * 0.15);
       var best = sectionEls[0];
@@ -121,7 +375,6 @@ ${settings.custom_css ? `<style>${settings.custom_css}</style>` : ''}
     }
     window.addEventListener('scroll', onScroll, { passive: true });
 
-    // Initial state from hash or scroll
     var initHash = window.location.hash ? window.location.hash.slice(1) : '';
     if (initHash) {
       setActiveToc(initHash);
@@ -137,13 +390,21 @@ ${settings.custom_css ? `<style>${settings.custom_css}</style>` : ''}
 <nav class="topbar">
   <div class="topbar-inner">
     <div class="topbar-title">
-      <a href="/" style="color:inherit;text-decoration:none">${esc(settings.header_logo_text || plugin.name)}</a>
-      <span data-lang="zh" style="color:var(--c-muted);font-weight:400;font-size:14px"> / ${esc(plugin.name)} 文档</span>
-      <span data-lang="en" style="color:var(--c-muted);font-weight:400;font-size:14px"> / ${esc(plugin.name)} Docs</span>
+      <span>${esc(plugin.name)}</span>
+      <span style="color:var(--c-muted);font-weight:400;font-size:14px"> ${docUI('nav.docs', lang)}</span>
     </div>
     <div class="topbar-actions">
-      <button class="lang-btn${lang === 'zh' ? ' active' : ''}" data-switch-lang="zh">中文</button>
-      <button class="lang-btn${lang === 'en' ? ' active' : ''}" data-switch-lang="en">English</button>
+      <div class="doc-lp" id="doc-lp">
+        <button class="doc-lp-btn" id="doc-lp-btn" type="button">
+          ${flagSpan(lang)} <span id="doc-lp-name">${localeName(lang)}</span>
+          <svg width="10" height="10" viewBox="0 0 12 12" style="opacity:.5"><path d="M6 8L1 3h10z" fill="currentColor"/></svg>
+        </button>
+        <ul class="doc-lp-menu" id="doc-lp-menu">
+          ${availableLocales.map(code =>
+            `<li data-code="${code}"${code === lang ? ' class="active"' : ''}>${flagSpan(code)} ${localeName(code)}</li>`
+          ).join('')}
+        </ul>
+      </div>
     </div>
   </div>
 </nav>
@@ -153,122 +414,142 @@ ${settings.custom_css ? `<style>${settings.custom_css}</style>` : ''}
   <p class="subtitle">${esc(plugin.description || '')}</p>
   <div class="badges">
     <span class="badge">v${esc(plugin.version)}</span>
-    <span class="badge ok">UE ${esc(plugin.ueVersion)}</span>
+    ${plugin.compatibility ? `<span class="badge ok">${esc(plugin.compatibility)}</span>` : ''}
     ${badgeTags.map((t: string, i: number) => `<span class="badge${i > 2 ? ' warn' : ''}">${esc(t)}</span>`).join('')}
   </div>
 </header>
 
 <div class="page"><div class="layout">
 <aside class="sidebar"><nav class="toc">
-${renderTOC(sections, translations)}
+${renderTOC(sections, translations, lang)}
 </nav></aside>
 <main class="content">
-${sections.length > 0 ? renderSections(sections, blocksBySection, translations, mediaMap) : `<div style="padding:40px;text-align:center;color:var(--c-muted)"><p data-lang="zh">暂无文档内容</p><p data-lang="en">No documentation yet.</p></div>`}
+${sections.length > 0
+  ? renderSections(sections, blocksBySection, translations, mediaMap, lang)
+  : `<div style="padding:40px;text-align:center;color:var(--c-muted)"><p>${docUI('main.empty', lang)}</p></div>`}
 </main>
 </div></div>
 
 <footer style="text-align:center;padding:40px 24px;color:var(--c-muted);font-size:13px;border-top:1px solid var(--c-border);margin-top:24px">
   ${settings.footer_text ? settings.footer_text : `&copy; ${new Date().getFullYear()} ${esc(plugin.name)} Documentation`}
 </footer>
+${LIGHTBOX}
+${extScriptsHtml}
 </body></html>`;
 }
 
-function renderTOC(sections: Section[], t: TranslationsMap): string {
+function renderTOC(sections: Section[], t: TranslationsMap, lang: string): string {
   return sections.map(s => {
     const children = s.children || [];
     let html = '';
-
     if (children.length > 0) {
-      // Category header (non-clickable)
-      const catTitle = sectionTitle(s, t);
-      html += `<div class="toc-category">`;
-      html += `<span data-lang="zh">${esc(catTitle.zh)}</span>`;
-      html += `<span data-lang="en">${esc(catTitle.en)}</span>`;
-      html += `</div>`;
+      html += `<div class="toc-category">${esc(sectionTitle(s, t, lang))}</div>`;
       for (const child of children) {
-        const childTitle = sectionTitle(child, t);
-        html += `<a href="#${esc(child.slug)}" class="toc-link">`;
-        html += `<span data-lang="zh">${esc(childTitle.zh)}</span>`;
-        html += `<span data-lang="en">${esc(childTitle.en)}</span>`;
-        html += `</a>`;
+        html += `<a href="#${esc(child.slug)}" class="toc-link toc-child-link">${esc(sectionTitle(child, t, lang))}</a>`;
       }
     } else {
-      // Standalone clickable link
-      const title = sectionTitle(s, t);
-      html += `<a href="#${esc(s.slug)}" class="toc-link">`;
-      html += `<span data-lang="zh">${esc(title.zh)}</span>`;
-      html += `<span data-lang="en">${esc(title.en)}</span>`;
-      html += `</a>`;
+      html += `<a href="#${esc(s.slug)}" class="toc-link">${esc(sectionTitle(s, t, lang))}</a>`;
     }
-
     return html;
   }).join('');
 }
 
-function renderSections(sections: Section[], blocksBySection: Map<number, ContentBlock[]>, t: TranslationsMap, m: MediaMap): string {
-  return sections.map(s => renderSection(s, s.children || [], blocksBySection, t, m)).join('');
+function renderSections(
+  sections: Section[],
+  blocksBySection: Map<number, ContentBlock[]>,
+  t: TranslationsMap,
+  m: MediaMap,
+  lang: string,
+): string {
+  return sections.map(s => renderSection(s, s.children || [], blocksBySection, t, m, lang)).join('');
 }
 
-function sectionTitle(s: Section, t: TranslationsMap): { zh: string; en: string } {
-  const key = `sec.${s.slug}.title`;
-  const entry = t.get(key);
-  return {
-    zh: entry?.zh || s.titleZh || s.slug,
-    en: entry?.en || s.titleEn || s.titleZh || s.slug,
-  };
-}
-
-function renderSection(section: Section, children: Section[], blocksBySection: Map<number, ContentBlock[]>, t: TranslationsMap, m: MediaMap): string {
+function renderSection(
+  section: Section,
+  children: Section[],
+  blocksBySection: Map<number, ContentBlock[]>,
+  t: TranslationsMap,
+  m: MediaMap,
+  lang: string,
+): string {
   const blocks = blocksBySection.get(section.id) || [];
-  const title = sectionTitle(section, t);
   let html = `<section class="section" id="${esc(section.slug)}">`;
-  html += `<h2><span data-lang="zh">${esc(title.zh)}</span><span data-lang="en">${esc(title.en)}</span></h2>`;
-  for (const block of blocks) html += renderBlock(block, t, m);
+  html += `<h2>${esc(sectionTitle(section, t, lang))}</h2>`;
+  for (const block of blocks) html += renderBlock(block, t, m, lang);
   for (const child of children) {
     const childBlocks = blocksBySection.get(child.id) || [];
-    const childTitle = sectionTitle(child, t);
     html += `<div class="subsection" id="${esc(child.slug)}">`;
-    html += `<h3><span data-lang="zh">${esc(childTitle.zh)}</span><span data-lang="en">${esc(childTitle.en)}</span></h3>`;
-    for (const block of childBlocks) html += renderBlock(block, t, m);
+    html += `<h3>${esc(sectionTitle(child, t, lang))}</h3>`;
+    for (const block of childBlocks) html += renderBlock(block, t, m, lang);
     html += `</div>`;
   }
   html += `</section>`;
   return html;
 }
 
-function renderBlock(block: ContentBlock, t: TranslationsMap, m: MediaMap = new Map()): string {
+function renderBlock(block: ContentBlock, t: TranslationsMap, m: MediaMap = new Map(), lang: string): string {
   let content: Record<string, unknown>;
   try { content = JSON.parse(block.contentJson || '{}'); } catch { return ''; }
 
   switch (block.type) {
     case 'html':
-      return applyPlaceholders(applyI18n(String(content.html || ''), t), m);
-    case 'text':
-      return renderBilingual(String(content.textZh || ''), String(content.textEn || ''));
+      return applyPlaceholders(applyI18n(String(content.html || ''), t, lang), m);
+
+    case 'text': {
+      const text = content.key
+        ? resolve(t, String(content.key), lang)
+        : String(lang === 'en' ? (content.textEn || content.textZh) : (content.textZh || content.textEn)) || '';
+      return text ? `<p>${text}</p>` : '';
+    }
+
+    case 'callout': {
+      const text = content.key
+        ? resolve(t, String(content.key), lang)
+        : String(lang === 'en' ? (content.textEn || content.textZh) : (content.textZh || content.textEn)) || '';
+      return text ? `<div class="callout">${text}</div>` : '';
+    }
+
     case 'code':
       return `<pre><code class="language-${esc(String(content.language || ''))}">${esc(String(content.code || ''))}</code></pre>`;
+
     case 'table':
       return renderTable(content as { headers?: Array<string | { text: string }>; rows?: Array<Array<string | { text: string }>> });
-    case 'card':
-      return renderCard(content as { titleZh?: string; titleEn?: string; textZh?: string; textEn?: string });
-    case 'cards':
-      return `<div class="grid2">${((content.cards || []) as Array<{ titleZh?: string; titleEn?: string; textZh?: string; textEn?: string }>).map(renderCard).join('')}</div>`;
-    case 'callout':
-      return `<div class="callout">${renderBilingual(String(content.textZh || ''), String(content.textEn || ''))}</div>`;
-    case 'code-tags':
-      return `<div class="code-tags">${((content.tags || []) as string[]).map(t => `<code>${esc(t)}</code>`).join('')}</div>`;
-    case 'list':
-      return renderList(content as { ordered?: boolean; items?: Array<string | { zh: string; en: string }> });
-    case 'image':
-      return content.src ? `<img src="${esc(String(content.src))}" alt="${esc(String(content.alt || ''))}" style="max-width:100%;border-radius:8px;margin:12px 0" />` : '';
-    default:
-      return '';
-  }
-}
 
-function renderBilingual(zh: string, en: string): string {
-  if (!zh && !en) return '';
-  return `<span data-lang="zh">${zh || en}</span><span data-lang="en">${en || zh}</span>`;
+    case 'card':
+      return renderCard(content as CardData, t, lang);
+
+    case 'cards':
+      return `<div class="grid2">${((content.cards || []) as CardData[]).map(c => renderCard(c, t, lang)).join('')}</div>`;
+
+    case 'code-tags':
+      return `<div class="code-tags">${((content.tags || []) as string[]).map(tag => `<code>${esc(tag)}</code>`).join('')}</div>`;
+
+    case 'list':
+      return renderList(content as ListData, t, lang);
+
+    case 'image': {
+      if (content.key) {
+        const md = m.get(String(content.key));
+        if (md) return `<img src="${esc(md.url)}" alt="${esc(String(content.alt || md.alt || ''))}" loading="lazy" onerror="docImgErr(this)" style="max-width:100%;border-radius:8px;margin:12px 0;display:block" />`;
+        return `<span style="display:inline-block;padding:4px 8px;border:1px dashed var(--c-border);border-radius:4px;color:var(--c-muted);font-size:12px">📷 ${esc(String(content.key))}</span>`;
+      }
+      return content.src ? `<img src="${esc(String(content.src))}" alt="${esc(String(content.alt || ''))}" loading="lazy" onerror="docImgErr(this)" style="max-width:100%;border-radius:8px;margin:12px 0;display:block" />` : '';
+    }
+
+    case 'video': {
+      if (content.key) {
+        const md = m.get(String(content.key));
+        if (md) return `<video src="${esc(md.url)}" controls style="max-width:100%;border-radius:8px;margin:12px 0;display:block"></video>`;
+        return `<span style="display:inline-block;padding:4px 8px;border:1px dashed var(--c-border);border-radius:4px;color:var(--c-muted);font-size:12px">🎬 ${esc(String(content.key))}</span>`;
+      }
+      return content.src ? `<video src="${esc(String(content.src))}" controls style="max-width:100%;border-radius:8px;margin:12px 0;display:block"></video>` : '';
+    }
+
+    default:
+      // Placeholder div for client-side extension renderers.
+      // DocForge.register({renderBlock:{[type]: fn}}) will replace this at DOMContentLoaded.
+      return `<div class="ext-block" data-type="${esc(block.type)}" data-content="${esc(block.contentJson)}" data-lang="${esc(lang)}"><span style="opacity:.4;font-size:12px;font-family:monospace;color:var(--c-muted)">[${esc(block.type)}]</span></div>`;
+  }
 }
 
 function renderTable(content: { headers?: Array<string | { text: string }>; rows?: Array<Array<string | { text: string }>> }): string {
@@ -285,34 +566,59 @@ function renderTable(content: { headers?: Array<string | { text: string }>; rows
   return html + '</table>';
 }
 
-function renderCard(content: { titleZh?: string; titleEn?: string; textZh?: string; textEn?: string }): string {
-  return `<div class="card">
-    <h4>${renderBilingual(content.titleZh || '', content.titleEn || '')}</h4>
-    <p>${renderBilingual(content.textZh || '', content.textEn || '')}</p>
-  </div>`;
+function renderCard(content: CardData, t: TranslationsMap, lang: string): string {
+  let title = '', text = '';
+  if (content.titleKey) {
+    title = resolve(t, content.titleKey, lang);
+  } else {
+    title = lang === 'en' ? (content.titleEn || content.titleZh || '') : (content.titleZh || content.titleEn || '');
+  }
+  if (content.textKey) {
+    text = resolve(t, content.textKey, lang);
+  } else {
+    text = lang === 'en' ? (content.textEn || content.textZh || '') : (content.textZh || content.textEn || '');
+  }
+  return `<div class="card"><h4>${title}</h4><p>${text}</p></div>`;
 }
 
-function renderList(content: { ordered?: boolean; items?: Array<string | { zh: string; en: string }> }): string {
+function renderList(content: ListData, t: TranslationsMap, lang: string): string {
   const tag = content.ordered ? 'ol' : 'ul';
   let html = `<${tag}>`;
   for (const item of content.items || []) {
     if (typeof item === 'string') {
       html += `<li>${esc(item)}</li>`;
+    } else if ('key' in item) {
+      html += `<li>${resolve(t, (item as { key: string }).key, lang)}</li>`;
     } else {
-      html += `<li>${renderBilingual(item.zh || '', item.en || '')}</li>`;
+      const i = item as { zh: string; en: string };
+      html += `<li>${lang === 'en' ? (i.en || i.zh) : (i.zh || i.en)}</li>`;
     }
   }
   return html + `</${tag}>`;
 }
 
 // ─── Home Page ───
-export function home(params: { plugins: Plugin[]; settings: Record<string, string>; lang: 'zh' | 'en' }): string {
-  const { plugins: pluginList, settings, lang } = params;
-  const htmlLang = lang === 'zh' ? 'zh-CN' : 'en';
-  return `<!doctype html><html lang="${htmlLang}" class="lang-${lang}"><head>
+export function home(params: {
+  plugins: Plugin[];
+  settings: Record<string, string>;
+  lang: string;
+  availableLocales?: string[];
+  extHeadHtml?: string;
+  extScriptsHtml?: string;
+  extI18nHtml?: string;
+  extMediaHtml?: string;
+}): string {
+  const { plugins: pluginList, settings, lang, availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '' } = params;
+  const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
+  return `<!doctype html><html lang="${htmlLang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(settings.site_title || 'UE5 Plugin Docs')}</title>
-${docThemeCSS()}
+<title>${esc(settings.site_title || 'DocForge')}</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
+${settings.custom_css ? `<style>${settings.custom_css}</style>` : docThemeCSS()}
+${extHeadHtml}
+${extHeadHtml || extScriptsHtml ? `<script>${DOCFORGE_RUNTIME}</script>` : ''}
+${extI18nHtml}
+${extMediaHtml}
 <style>
 .home-hero{text-align:center;padding:80px 24px 48px}
 .home-hero h1{font-size:clamp(36px,5vw,56px);margin-bottom:12px}
@@ -329,32 +635,49 @@ ${docThemeCSS()}
 .plugin-card-badges{display:flex;gap:6px;flex-shrink:0}
 .topbar-home{position:sticky;top:0;z-index:100;background:rgba(13,17,23,.9);backdrop-filter:blur(12px);border-bottom:1px solid var(--c-border);padding:10px 0}
 .topbar-inner{max-width:1200px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between}
+.doc-lp{position:relative;display:inline-block}
+.doc-lp-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-surface);color:var(--c-text);cursor:pointer;font:inherit;font-size:13px;white-space:nowrap}
+.doc-lp-btn:hover{border-color:var(--c-accent)}
+.doc-lp-menu{position:absolute;right:0;top:calc(100% + 6px);min-width:180px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:8px;z-index:999;list-style:none;margin:0;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none;max-height:320px;overflow-y:auto}
+.doc-lp-menu.open{display:block}
+.doc-lp-menu li{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:14px}
+.doc-lp-menu li:hover{background:rgba(88,166,255,.08);color:var(--c-accent)}
+.doc-lp-menu li.active{color:var(--c-accent);font-weight:600}
 </style>
 <script>
-document.addEventListener('DOMContentLoaded',function(){
-  document.querySelectorAll('.lang-btn').forEach(function(btn){
-    btn.addEventListener('click',function(){
-      var lang=btn.dataset.switchLang;
-      document.documentElement.className='lang-'+lang;
-      document.querySelectorAll('.lang-btn').forEach(function(b){b.classList.toggle('active',b.dataset.switchLang===lang);});
-      fetch('/api/set-lang?lang='+lang);
+document.addEventListener('DOMContentLoaded', function() {
+  var btn=document.getElementById('doc-lp-btn'),menu=document.getElementById('doc-lp-menu');
+  if(btn&&menu){
+    btn.addEventListener('click',function(e){e.stopPropagation();menu.classList.toggle('open');});
+    document.addEventListener('click',function(){menu.classList.remove('open');});
+    menu.querySelectorAll('li').forEach(function(li){
+      li.addEventListener('click',function(){
+        fetch('/api/set-lang?lang='+li.dataset.code).then(function(){location.reload();});
+      });
     });
-  });
+  }
 });
 </script>
 </head><body>
 <nav class="topbar-home">
   <div class="topbar-inner">
     <div style="font-weight:800;font-size:18px;color:var(--c-text)">${esc(settings.header_logo_text || 'Plugin Docs')}</div>
-    <div style="display:flex;gap:8px">
-      <button class="lang-btn${lang === 'zh' ? ' active' : ''}" data-switch-lang="zh">中文</button>
-      <button class="lang-btn${lang === 'en' ? ' active' : ''}" data-switch-lang="en">English</button>
+    <div class="doc-lp" id="doc-lp">
+      <button class="doc-lp-btn" id="doc-lp-btn" type="button">
+        ${flagSpan(lang)} <span>${localeName(lang)}</span>
+        <svg width="10" height="10" viewBox="0 0 12 12" style="opacity:.5"><path d="M6 8L1 3h10z" fill="currentColor"/></svg>
+      </button>
+      <ul class="doc-lp-menu" id="doc-lp-menu">
+        ${availableLocales.map(code =>
+          `<li data-code="${code}"${code === lang ? ' class="active"' : ''}>${flagSpan(code)} ${localeName(code)}</li>`
+        ).join('')}
+      </ul>
     </div>
   </div>
 </nav>
 <div class="home-hero">
   <h1>${esc(settings.header_logo_text || 'Plugin Docs')}</h1>
-  <p>${esc(settings.site_subtitle || 'Unreal Engine Plugin Documentation')}</p>
+  <p>${esc(settings.site_subtitle || 'Plugin documentation')}</p>
 </div>
 <div class="plugin-list">
   ${pluginList.map(p => `
@@ -366,11 +689,12 @@ document.addEventListener('DOMContentLoaded',function(){
       </div>
       <div class="plugin-card-badges">
         <span class="badge" style="font-size:11px;padding:4px 8px">v${esc(p.version)}</span>
-        <span class="badge ok" style="font-size:11px;padding:4px 8px">UE ${esc(p.ueVersion)}</span>
+        ${p.compatibility ? `<span class="badge ok" style="font-size:11px;padding:4px 8px">${esc(p.compatibility)}</span>` : ''}
       </div>
     </a>`).join('')}
-  ${pluginList.length === 0 ? `<p style="text-align:center;color:var(--c-muted);grid-column:1/-1"><span data-lang="zh">暂无插件，</span><span data-lang="en">No plugins yet. </span><a href="/admin">进入管理后台</a></p>` : ''}
+  ${pluginList.length === 0 ? `<p style="text-align:center;color:var(--c-muted);grid-column:1/-1">${docUI('home.noPlugins', lang)}，<a href="/admin">${docUI('home.enterAdmin', lang)}</a></p>` : ''}
 </div>
+${extScriptsHtml}
 </body></html>`;
 }
 

@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS extensions (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug         TEXT    NOT NULL UNIQUE,
+  name         TEXT    NOT NULL,
+  description  TEXT    NOT NULL DEFAULT '',
+  version      TEXT    NOT NULL DEFAULT '1.0.0',
+  author       TEXT    NOT NULL DEFAULT '',
+  icon         TEXT    NOT NULL DEFAULT '🧩',
+  homepage     TEXT    NOT NULL DEFAULT '',
+  ext_type     TEXT    NOT NULL DEFAULT 'general',
+  enabled      INTEGER NOT NULL DEFAULT 1,
+  css          TEXT    NOT NULL DEFAULT '',
+  js           TEXT    NOT NULL DEFAULT '',
+  head_html    TEXT    NOT NULL DEFAULT '',
+  block_types  TEXT    NOT NULL DEFAULT '[]',
+  config_schema TEXT   NOT NULL DEFAULT '{}',
+  config       TEXT    NOT NULL DEFAULT '{}',
+  created_at   TEXT    NOT NULL,
+  updated_at   TEXT    NOT NULL
+);

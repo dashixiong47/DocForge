@@ -1,12 +1,12 @@
 -- Migration: 0001_initial
--- Creates the core schema for UE5 Plugin Documentation CMS
+-- Creates the core schema for DocForge
 
 CREATE TABLE IF NOT EXISTS plugins (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   slug          TEXT NOT NULL UNIQUE,
   name          TEXT NOT NULL,
   version       TEXT NOT NULL DEFAULT '1.0.0',
-  ue_version    TEXT NOT NULL DEFAULT '5.0+',
+  compatibility TEXT NOT NULL DEFAULT '',
   description   TEXT DEFAULT '',
   icon_url      TEXT DEFAULT '',
   badge_tags    TEXT DEFAULT '[]',
@@ -63,8 +63,8 @@ CREATE TABLE IF NOT EXISTS admins (
 );
 
 -- Default site settings (safe for re-run)
-INSERT OR IGNORE INTO site_settings (key, value) VALUES ('site_title', 'UE5 Plugin Docs');
-INSERT OR IGNORE INTO site_settings (key, value) VALUES ('site_subtitle', 'Unreal Engine Plugin Documentation');
+INSERT OR IGNORE INTO site_settings (key, value) VALUES ('site_title', 'DocForge');
+INSERT OR IGNORE INTO site_settings (key, value) VALUES ('site_subtitle', 'Plugin documentation');
 INSERT OR IGNORE INTO site_settings (key, value) VALUES ('header_logo_text', 'Plugin Docs');
 INSERT OR IGNORE INTO site_settings (key, value) VALUES ('header_accent_color', '#58a6ff');
 INSERT OR IGNORE INTO site_settings (key, value) VALUES ('footer_text', '');

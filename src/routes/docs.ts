@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
-import { eq, asc, inArray, sql } from 'drizzle-orm';
-import { plugins, sections, contentBlocks, translations, media } from '../db/schema';
+import { eq, asc, inArray, sql, ne, and, notLike } from 'drizzle-orm';
+import { analyticsEvents, plugins, sections, contentBlocks, translations, media } from '../db/schema';
 import { docPage } from '../templates/doc_page';
 import type { TranslationsMap, MediaMap } from '../templates/doc_page';
 import { notFoundPage } from '../templates/error_pages';
 import { getSettingsMap } from '../services/settings';
+import { loadEnabledExtensions, buildExtensionHead, buildExtensionScripts, buildExtensionI18nInject, buildExtensionMediaInject, buildDocTransInject } from '../services/extensions';
 import type { AppType } from '../types';
 
 type SectionRow = typeof sections.$inferSelect;
@@ -14,20 +15,25 @@ interface SectionWithChildren extends SectionRow {
   children: SectionRow[];
 }
 
-function getLang(c: { req: { header: (k: string) => string | undefined } }): 'zh' | 'en' {
+function getLang(c: { req: { header: (k: string) => string | undefined } }): string {
   const cookie = c.req.header('Cookie') || '';
   const m = cookie.match(/(?:^|;\s*)lang=([^;]+)/);
-  return m?.[1] === 'en' ? 'en' : 'zh';
+  return m?.[1] || 'zh';
+}
+
+function clientIp(c: { req: { header: (k: string) => string | undefined } }): string {
+  return c.req.header('CF-Connecting-IP')
+    || (c.req.header('X-Forwarded-For') || '').split(',')[0].trim()
+    || c.req.header('X-Real-IP')
+    || '';
 }
 
 async function loadTranslations(db: ReturnType<typeof import('../db').createDB>, pluginId: number): Promise<TranslationsMap> {
   const rows = await db.select().from(translations).where(eq(translations.pluginId, pluginId)).all();
   const map: TranslationsMap = new Map();
   for (const row of rows) {
-    if (!map.has(row.key)) map.set(row.key, { zh: '', en: '' });
-    const entry = map.get(row.key)!;
-    if (row.locale === 'zh') entry.zh = row.value;
-    if (row.locale === 'en') entry.en = row.value;
+    if (!map.has(row.key)) map.set(row.key, {});
+    map.get(row.key)![row.locale] = row.value;
   }
   return map;
 }
@@ -58,11 +64,23 @@ docsRoutes.get('/:slug', async (c) => {
   const db = c.get('db');
   const lang = getLang(c);
 
-  // Case-insensitive slug lookup (/WebUIX → webuix)
+  // Case-insensitive slug lookup (/MyDoc -> mydoc); only serve enabled docs
   const plugin = await db.select().from(plugins)
     .where(sql`lower(${plugins.slug}) = lower(${slug})`)
     .get();
-  if (!plugin) return c.html(notFoundPage(slug));
+  if (!plugin || !plugin.enabled) return c.html(notFoundPage(slug));
+
+  c.executionCtx.waitUntil(
+    db.insert(analyticsEvents).values({
+      pluginId: plugin.id,
+      pluginSlug: plugin.slug,
+      path: c.req.path,
+      ip: clientIp(c),
+      country: c.req.header('CF-IPCountry') || '',
+      userAgent: c.req.header('User-Agent') || '',
+      createdAt: new Date().toISOString(),
+    }).run().catch(() => undefined)
+  );
 
   const allSections = await db.select()
     .from(sections)
@@ -105,20 +123,56 @@ docsRoutes.get('/:slug', async (c) => {
     blocksBySection.get(b.sectionId)!.push(b);
   }
 
-  const [settings, t, mediaMap] = await Promise.all([
+  const [settings, t, mediaMap, enabledExts] = await Promise.all([
     getSettingsMap(db),
     loadTranslations(db, plugin.id),
     loadMediaMap(db, plugin.id),
+    loadEnabledExtensions(db),
   ]);
 
-  const html = docPage.docLayout({ plugin, sections: topSections, blocksBySection, settings, lang, translations: t, mediaMap });
+  // Collect locales that have at least one non-empty translation
+  const availableLocales = [...new Set(
+    [...t.values()].flatMap(entry =>
+      Object.entries(entry).filter(([, v]) => v.trim()).map(([k]) => k)
+    )
+  )];
+  if (!availableLocales.includes('zh')) availableLocales.unshift('zh');
+  if (!availableLocales.includes('en') && availableLocales.length < 2) availableLocales.push('en');
+
+  const html = docPage.docLayout({
+    plugin, sections: topSections, blocksBySection, settings, lang,
+    translations: t, mediaMap, availableLocales,
+    extHeadHtml:      buildExtensionHead(enabledExts, lang, mediaMap),
+    extI18nHtml:      buildExtensionI18nInject(enabledExts),
+    extMediaHtml:     buildExtensionMediaInject(mediaMap),
+    extDocTransHtml:  buildDocTransInject(t, lang),
+    extScriptsHtml:   buildExtensionScripts(enabledExts),
+  });
   return c.html(html);
 });
 
 docsRoutes.get('/', async (c) => {
   const db = c.get('db');
   const lang = getLang(c);
-  const allPlugins = await db.select().from(plugins).orderBy(asc(plugins.sortOrder)).all();
-  const settings = await getSettingsMap(db);
-  return c.html(docPage.home({ plugins: allPlugins, settings, lang }));
+  const [allPlugins, settings, enabledExts] = await Promise.all([
+    db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'), eq(plugins.enabled, 1))).orderBy(asc(plugins.sortOrder)).all(),
+    getSettingsMap(db),
+    loadEnabledExtensions(db),
+  ]);
+  // Collect available locales from system translations
+  let availableLocales: string[] = ['zh', 'en'];
+  const systemPlugin = await db.select().from(plugins).where(eq(plugins.slug, '__system__')).get();
+  if (systemPlugin) {
+    const locRows = await db.select({ locale: translations.locale })
+      .from(translations).where(eq(translations.pluginId, systemPlugin.id)).all();
+    const locs = [...new Set(locRows.map(r => r.locale))].filter(Boolean);
+    if (locs.length > 0) availableLocales = locs;
+  }
+  return c.html(docPage.home({
+    plugins: allPlugins, settings, lang, availableLocales,
+    extHeadHtml:    buildExtensionHead(enabledExts, lang),
+    extI18nHtml:    buildExtensionI18nInject(enabledExts),
+    extMediaHtml:   '',
+    extScriptsHtml: buildExtensionScripts(enabledExts),
+  }));
 });

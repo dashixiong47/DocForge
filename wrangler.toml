@@ -13,12 +13,14 @@ database_id = "local-dev"
 
 [[r2_buckets]]
 binding = "MEDIA"
-bucket_name = "ue5-docs-media"
+bucket_name = "docforge-media"
 
+# 默认变量（会被根目录 .dev.vars 覆盖用于本地开发）
+# 生产环境请用: wrangler secret put ADMIN_PASSWORD
 [vars]
 JWT_SECRET = "change-me-in-production"
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "change-me"
+ADMIN_PASSWORD = "admin123"
 SITE_TITLE = "DocForge"
 SITE_DOMAIN = ""
 

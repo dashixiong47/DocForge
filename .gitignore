@@ -7,9 +7,9 @@ dist/
 *.sqlite-journal
 *.sqlite-wal
 
-# temp files
+# temp / scratch files (put anything here, won't be committed)
+tmp/
 *.tmp
-cookies.txt
 fix_backticks.mjs
 rebuild_editor.mjs
 fix_all.mjs
@@ -32,4 +32,6 @@ scripts/
 # Sensitive local config overrides
 .env
 .env.local
+.dev.vars
+!.dev.vars.example
 wrangler.local.toml

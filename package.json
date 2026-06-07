@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute docforge-db --local --file=./migrations/0001_initial.sql && wrangler d1 execute docforge-db --local --file=./migrations/0002_translations.sql && wrangler d1 execute docforge-db --local --file=./migrations/0003_media_placeholder_key.sql",
+    "secrets:push": "node tools/push-dev-vars-secrets.mjs",
+    "db:init": "node tools/migrate-d1.mjs --local",
+    "db:migrate:remote": "node tools/migrate-d1.mjs --remote",
+    "deploy:local": "npm run secrets:push && npm run db:migrate:remote && wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

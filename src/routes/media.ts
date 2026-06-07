@@ -7,9 +7,9 @@ export const mediaRoutes = new Hono<AppType>();
 
 // Serve media files from R2
 mediaRoutes.get('/:plugin/*', async (c) => {
-  const plugin = c.req.param('plugin');
-  const filePath = c.req.param('*');
-  const key = `${plugin}/${filePath}`;
+  // c.req.param('*') is undefined in Hono v4 sub-routers — use URL pathname instead
+  const rawPath = new URL(c.req.url).pathname; // /media/docs/1.png
+  const key = rawPath.replace(/^\/media\//, '');  // docs/1.png
 
   const object = await c.env.MEDIA.get(key);
   if (!object) {
@@ -73,6 +73,7 @@ mediaRoutes.put('/upload/:plugin', async (c) => {
     d2Key: key,
     mimeType: file.type,
     sizeBytes: file.size,
+    placeholderKey: pk || null,
     createdAt: now,
   }).returning().get();
 

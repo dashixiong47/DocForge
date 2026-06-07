@@ -1,0 +1,1 @@
+ALTER TABLE plugins ADD COLUMN custom_js TEXT DEFAULT '';

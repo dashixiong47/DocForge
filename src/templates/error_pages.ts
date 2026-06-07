@@ -58,9 +58,10 @@ hr{border:0;border-top:1px solid var(--c-border);margin:24px 0}
 .topbar-title{font-weight:800;font-size:17px;color:var(--c-text)}
 .topbar-title span{color:var(--c-accent)}
 .topbar-actions{display:flex;gap:6px;align-items:center}
-.lang-btn{border:1px solid var(--c-border);background:transparent;color:var(--c-muted);padding:5px 12px;border-radius:6px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
-.lang-btn.active{background:var(--c-accent);color:#fff;border-color:var(--c-accent)}
-.lang-btn:hover:not(.active){border-color:var(--c-accent);color:var(--c-accent)}
+.lang-sel{padding:5px 28px 5px 10px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-surface);color:var(--c-text);font:inherit;font-size:12px;cursor:pointer;min-width:90px;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M6 8L1 3h10z' fill='%238b949e'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;transition:.15s}
+.lang-sel:focus{outline:none;border-color:var(--c-accent)}
+.lang-sel:hover{border-color:var(--c-accent);color:var(--c-accent)}
+.lang-sel option{background:var(--c-surface);color:var(--c-text)}
 
 /* ── Hero ── */
 .hero{text-align:center;padding:48px 24px 32px}
@@ -178,6 +179,10 @@ hr{border:0;border-top:1px solid var(--c-border);margin:24px 0}
 /* ── Language ── */
 .lang-zh [data-lang=en],.lang-en [data-lang=zh]{display:none}
 
+/* ── Image placeholder ── */
+.img-ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:1.5px dashed var(--c-border);border-radius:var(--radius);padding:32px 20px;margin:12px 0;color:var(--c-muted);font-size:13px;background:rgba(22,27,34,.4);text-align:center}
+.img-ph svg{opacity:.35;flex-shrink:0}
+
 /* ── Responsive ── */
 @media(max-width:960px){
   .layout{grid-template-columns:1fr}
@@ -185,3 +190,6 @@ hr{border:0;border-top:1px solid var(--c-border);margin:24px 0}
 }
 </style>`;
 }
+
+// Raw CSS (no <style> tags) — used as default value for settings.custom_css
+export const DOC_THEME_CSS: string = docThemeCSS().replace(/^<style>/, '').replace(/<\/style>$/, '');
