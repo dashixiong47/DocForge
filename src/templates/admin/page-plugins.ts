@@ -49,7 +49,16 @@ export const plugins = (all: any[]) => adminLayout({
       <div class="form-row"><div class="form-group"><label data-i18n="docs.slug">标识 (slug)</label><input id="eslug-${p.id}" value="${esc(p.slug)}"></div><div class="form-group"><label data-i18n="docs.name">名称</label><input id="ename-${p.id}" value="${esc(p.name)}"></div><div class="form-group"><label data-i18n="docs.version">版本</label><input id="ever-${p.id}" value="${esc(p.version)}" style="max-width:120px"></div></div>
       <div class="form-group"><label data-i18n="docs.desc">描述</label><textarea id="edesc-${p.id}" rows="2" style="min-height:46px">${esc(p.description||'')}</textarea></div>
       <div class="form-group"><label data-i18n="docs.icon">图标</label><input id="eicon-${p.id}" value="${esc(p.iconUrl||'')}" type="hidden"><div class="icon-field"><div class="icon-slot ${p.iconUrl?'':'empty'}" id="icon-preview-${p.id}" onclick="openMediaPicker('${esc(p.slug)}','eicon-${p.id}','icon-preview-${p.id}')" data-i18n-title="${p.iconUrl?'docs.changeIcon':'docs.selectIcon'}" title="${p.iconUrl?'更换图标':'选择图标'}">${p.iconUrl?`<img src="${esc(p.iconUrl)}" alt="" onerror="renderIconSlot('icon-preview-${p.id}','')">`:''}</div></div></div>
-      <div class="form-row"><div class="form-group" style="flex:1"><label data-i18n="docs.sort">排序</label><input id="esort-${p.id}" type="number" value="${p.sortOrder||0}" style="max-width:100px"></div><div class="form-group" style="flex:1"><label data-i18n="docs.homeVisible">首页展示</label><label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="elisted-${p.id}" type="checkbox" ${p.listed?'checked':''}> <span data-i18n="docs.listedHint">启用后显示在首页列表</span></label></div></div>
+      <div class="settings-grid">
+        <div class="setting-tile">
+          <div class="setting-tile-main"><div class="setting-tile-title" data-i18n="docs.sort">排序</div><div class="setting-tile-desc" data-i18n="docs.sortHint">数值越小越靠前</div></div>
+          <div class="setting-tile-control"><input id="esort-${p.id}" type="number" value="${p.sortOrder||0}"></div>
+        </div>
+        <div class="setting-tile">
+          <div class="setting-tile-main"><div class="setting-tile-title" data-i18n="docs.homeVisible">首页展示</div><div class="setting-tile-desc" data-i18n="docs.listedHint">启用后显示在首页列表</div></div>
+          <div class="setting-tile-control"><label class="toggle" data-i18n-title="${p.listed?'docs.hideFromHome':'docs.showOnHome'}" title="${p.listed?'从首页隐藏':'在首页展示'}"><input id="elisted-${p.id}" type="checkbox" ${p.listed?'checked':''}><span class="toggle-slider"></span></label></div>
+        </div>
+      </div>
       <div class="form-group"><label data-i18n="docs.tags">标签</label><div class="tag-input-wrap" id="tag-wrap-${p.id}" onclick="this.querySelector('input').focus()"></div></div>
       <div class="btn-group" style="margin-top:8px;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="saveEditP(${p.id})" data-i18n="docs.save">保存</button><button class="btn btn-outline btn-sm" onclick="toggleEditP(${p.id})" data-i18n="docs.cancel">取消</button></div>
     </div>

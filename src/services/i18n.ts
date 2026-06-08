@@ -61,6 +61,7 @@ export const ADMIN_I18N: Record<string, { zh: string; en: string }> = {
   'docs.desc': { zh: '描述', en: 'Description' },
   'docs.icon': { zh: '图标', en: 'Icon' },
   'docs.sort': { zh: '排序', en: 'Sort Order' },
+  'docs.sortHint': { zh: '数值越小越靠前', en: 'Lower values appear first' },
   'docs.tags': { zh: '标签', en: 'Tags' },
   'docs.save': { zh: '保存', en: 'Save' },
   'docs.cancel': { zh: '取消', en: 'Cancel' },
