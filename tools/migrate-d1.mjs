@@ -87,8 +87,17 @@ function queryJson(sql, label) {
 
   try {
     const stdout = result.stdout || '[]';
-    const jsonStart = stdout.indexOf('[');
-    return JSON.parse(jsonStart >= 0 ? stdout.slice(jsonStart) : stdout);
+    const lines = stdout.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      const candidate = lines.slice(i).join('\n');
+      if (!candidate.startsWith('[') && !candidate.startsWith('{')) continue;
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        // Wrangler can print progress or warnings before JSON output.
+      }
+    }
+    return JSON.parse(stdout);
   } catch {
     return result.stdout || '';
   }
@@ -97,7 +106,7 @@ function queryJson(sql, label) {
 function hasRows(queryResult) {
   if (typeof queryResult === 'string') return false;
   const results = Array.isArray(queryResult) ? queryResult : [queryResult];
-  return results.some(item => Array.isArray(item?.results) && item.results.length > 0);
+  return results.some(item => item?.success === true && Array.isArray(item?.results) && item.results.length > 0);
 }
 
 function markApplied(file) {
