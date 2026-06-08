@@ -58,16 +58,25 @@ async function loadMediaMap(db: ReturnType<typeof import('../db').createDB>, plu
 
 export const docsRoutes = new Hono<AppType>();
 
+function normalizeSlugAlias(slug: string): string {
+  return slug.trim().toLowerCase().replace(/[-_]/g, '');
+}
 
 docsRoutes.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
+  const normalizedSlug = normalizeSlugAlias(slug);
   const db = c.get('db');
   const lang = getLang(c);
 
-  // Case-insensitive slug lookup (/MyDoc -> mydoc); only serve enabled docs
-  const plugin = await db.select().from(plugins)
+  // Prefer exact case-insensitive match, then allow hyphen/underscore/no-separator aliases.
+  let plugin = await db.select().from(plugins)
     .where(sql`lower(${plugins.slug}) = lower(${slug})`)
     .get();
+  if (!plugin) {
+    plugin = await db.select().from(plugins)
+      .where(sql`lower(replace(replace(${plugins.slug}, '-', ''), '_', '')) = ${normalizedSlug}`)
+      .get();
+  }
   if (!plugin || !plugin.enabled) return c.html(notFoundPage(slug));
 
   c.executionCtx.waitUntil(
