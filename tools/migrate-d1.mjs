@@ -72,7 +72,7 @@ function queryJson(sql, label) {
   const marker = resolve(tmpDir, `${label}-${mode}.sql`);
   writeFileSync(marker, sql);
   const result = spawnSync('npx', [
-    'wrangler', 'd1', 'execute', dbName, modeFlag, '--file', marker, '--json',
+    'wrangler', 'd1', 'execute', dbName, modeFlag, '--command', sql, '--json',
   ], {
     cwd: root,
     shell: true,
