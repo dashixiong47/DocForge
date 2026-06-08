@@ -121,14 +121,18 @@ for (const file of migrationFiles) {
     `SELECT filename FROM schema_migrations WHERE filename = '${sqlString(file)}';`,
     'migration-recorded',
   );
+  const schemaCheck = existingSchemaChecks[file];
+  const schemaExists = schemaCheck ? hasRows(queryJson(schemaCheck, 'migration-schema-check')) : false;
 
-  if (hasRows(recorded)) {
+  if (hasRows(recorded) && (!schemaCheck || schemaExists)) {
     console.log(`Skipping ${file}`);
     continue;
   }
+  if (hasRows(recorded) && schemaCheck && !schemaExists) {
+    console.log(`Reapplying ${file}; migration record exists but schema check failed`);
+  }
 
-  const schemaCheck = existingSchemaChecks[file];
-  if (schemaCheck && hasRows(queryJson(schemaCheck, 'migration-schema-check'))) {
+  if (!hasRows(recorded) && schemaCheck && schemaExists) {
     console.log(`Marking ${file} as already applied`);
     markApplied(file);
     continue;
