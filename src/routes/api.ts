@@ -79,6 +79,22 @@ function clientIp(c: { req: { header: (k: string) => string | undefined } }): st
     || '';
 }
 
+function clampText(value: unknown, max: number): string {
+  return String(value || '').trim().slice(0, max);
+}
+
+function originOnly(value: unknown): string {
+  const raw = clampText(value, 512);
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    return u.origin;
+  } catch {
+    return raw.replace(/[^\w.:/-]/g, '').slice(0, 256);
+  }
+}
+
 function ensureShareToken(row: { id: number; shareToken: string }): string {
   if (row.shareToken) return row.shareToken;
   const bytes = crypto.getRandomValues(new Uint8Array(16));
@@ -1007,27 +1023,57 @@ apiRoutes.get('/extensions/:slug/manifest.json', async (c) => {
 
 apiRoutes.post('/extensions/share-install', async (c) => {
   const db = c.get('db');
-  const body: { token?: string; slug?: string; sourceUrl?: string; installerOrigin?: string } =
-    await c.req.json<{ token?: string; slug?: string; sourceUrl?: string; installerOrigin?: string }>().catch(() => ({}));
+  const raw = await c.req.text();
+  if (raw.length > 2048) return c.json({ ok: false, error: 'Payload too large' }, 413);
+  let body: { token?: string; slug?: string; sourceUrl?: string; installerOrigin?: string } = {};
+  try {
+    body = JSON.parse(raw || '{}');
+  } catch {
+    return c.json({ ok: false, error: 'Invalid JSON' }, 400);
+  }
   const token = String(body.token || '').trim();
   if (!/^[a-f0-9]{32}$/.test(token)) return c.json({ ok: false, error: 'Invalid token' }, 400);
+  const slug = clampText(body.slug, 80);
+  if (slug && !/^[a-z0-9-]+$/.test(slug)) return c.json({ ok: false, error: 'Invalid slug' }, 400);
   const row = await db.select({
     id: extensions.id,
     slug: extensions.slug,
     shareNotify: extensions.shareNotify,
   }).from(extensions).where(eq(extensions.shareToken, token)).get();
   if (!row) return c.json({ ok: false, error: 'Unknown share token' }, 404);
+  if (slug && slug !== row.slug) return c.json({ ok: false, error: 'Slug mismatch' }, 400);
   if (!row.shareNotify) return c.json({ ok: true, disabled: true });
+  const ip = clientIp(c);
+  const installerOrigin = originOnly(body.installerOrigin);
+  const sourceUrl = clampText(body.sourceUrl, 512);
   const now = new Date().toISOString();
+  const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
+  const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+  const recentRows = await db.select({
+    ip: extensionShareEvents.ip,
+    installerOrigin: extensionShareEvents.installerOrigin,
+    sourceUrl: extensionShareEvents.sourceUrl,
+    createdAt: extensionShareEvents.createdAt,
+  }).from(extensionShareEvents)
+    .where(and(eq(extensionShareEvents.token, token), sql`${extensionShareEvents.createdAt} >= ${dayAgo}`))
+    .all();
+  const recentMinute = recentRows.filter(e => e.createdAt >= oneMinuteAgo).length;
+  if (recentMinute >= 30) return c.json({ ok: true, limited: true });
+  const sameInstaller = recentRows.some(e =>
+    (installerOrigin && e.installerOrigin === installerOrigin)
+    || (ip && e.ip === ip && sourceUrl && e.sourceUrl === sourceUrl)
+    || (ip && !installerOrigin && e.ip === ip)
+  );
+  if (sameInstaller) return c.json({ ok: true, duplicate: true });
   await db.insert(extensionShareEvents).values({
     extensionId: row.id,
     extensionSlug: row.slug,
     token,
     eventType: 'install',
-    sourceUrl: String(body.sourceUrl || ''),
-    installerOrigin: String(body.installerOrigin || ''),
-    installerUserAgent: c.req.header('User-Agent') || '',
-    ip: clientIp(c),
+    sourceUrl,
+    installerOrigin,
+    installerUserAgent: clampText(c.req.header('User-Agent'), 300),
+    ip,
     country: c.req.header('CF-IPCountry') || '',
     createdAt: now,
   }).run();
