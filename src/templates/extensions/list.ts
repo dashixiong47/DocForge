@@ -38,7 +38,7 @@ function extI18n(ext: Extension, key: string, lang: string, fallback: string): s
 }
 
 // ─── Plugins list page (inside admin layout) ──────────────────────────────────
-export function extensionsList(exts: Extension[]): string {
+export function extensionsList(exts: Extension[], lang = 'zh'): string {
   const allTags = [...new Set(exts.flatMap(e => e.tags))].sort();
 
   const BLANK_TEMPLATES = {
@@ -116,7 +116,9 @@ export function extensionsList(exts: Extension[]): string {
 .chip{font-size:11px;padding:2px 7px;border-radius:4px}
 .chip-block{background:rgba(88,166,255,.1);color:var(--accent);border:1px solid rgba(88,166,255,.2);font-family:monospace}
 .chip-tag{background:rgba(63,185,80,.1);color:var(--ok);border:1px solid rgba(63,185,80,.2)}
-.ext-actions{display:flex;gap:6px;align-items:center;border-top:1px solid var(--border);padding-top:10px;margin-top:auto}
+.ext-actions{display:flex;gap:6px;align-items:center;border-top:1px solid var(--border);padding-top:10px;margin-top:auto;min-width:0}
+.ext-state{font-size:12px;color:var(--muted);flex:1 0 auto;min-width:max-content;white-space:nowrap}
+.ext-actions .btn{flex-shrink:0;white-space:nowrap}
 .toggle{position:relative;width:36px;height:20px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0}
 .toggle-slider{position:absolute;inset:0;background:#30363d;border-radius:20px;cursor:pointer;transition:.2s}
@@ -175,7 +177,6 @@ ${exts.length === 0 ? `
 </div>` : `
 <div class="ext-grid" id="ext-grid">
   ${exts.map(ext => {
-    const lang = 'zh';
     const displayName = extI18n(ext, 'meta.name', lang, ext.name);
     const displayDesc = extI18n(ext, 'meta.description', lang, ext.description);
     const displayAuthor = extI18n(ext, 'meta.author', lang, ext.author);
@@ -201,7 +202,7 @@ ${exts.length === 0 ? `
         </div>
       </div>
       ${ext.description ? `<div class="ext-desc" data-ext-i18n="${ext.id}:meta.description" data-fallback="${esc(ext.description)}">${esc(displayDesc)}</div>` : ''}
-      ${displayBlocks.length || displayTags.length ? `<div class="chips" data-ext-chips="${ext.id}">
+      ${displayBlocks.length || displayTags.length ? `<div class="chips" data-ext-chips="${ext.id}" data-block-fallback="${esc(ext.blockTypes.join(','))}" data-tag-fallback="${esc(ext.tags.join(','))}">
         ${displayBlocks.map(t => `<span class="chip chip-block">${esc(t)}</span>`).join('')}
         ${displayTags.map(t => `<span class="chip chip-tag">#${esc(t)}</span>`).join('')}
       </div>` : ''}
@@ -211,7 +212,7 @@ ${exts.length === 0 ? `
           <input type="checkbox" ${ext.enabled ? 'checked' : ''} onchange="toggleExt(${ext.id},this)">
           <span class="toggle-slider"></span>
         </label>
-        <span style="font-size:12px;color:var(--muted);flex:1" data-i18n="${ext.enabled ? 'ext.enabled' : 'ext.disabled'}">${ext.enabled ? '已启用' : '已禁用'}</span>
+        <span class="ext-state" data-i18n="${ext.enabled ? 'ext.enabled' : 'ext.disabled'}">${ext.enabled ? '已启用' : '已禁用'}</span>
         <a href="/admin/extensions/${ext.id}" class="btn" data-i18n="ext.edit">编辑</a>
         <button class="btn btn-danger" onclick="deleteExt(${ext.id},'${esc(ext.name)}')" data-i18n="ext.delete">删除</button>
       </div>
@@ -277,7 +278,7 @@ ${exts.length === 0 ? `
 <script>
 // ── Card actions ──
 async function toggleExt(id,cb){
-  var card=cb.closest('.ext-card'),lbl=card.querySelector('.ext-actions span');
+  var card=cb.closest('.ext-card'),lbl=card.querySelector('.ext-state');
   var r=await fetch('/api/admin/extensions/'+id+'/toggle',{method:'PUT'});
   var d=await r.json();
   if(d.ok){
@@ -419,6 +420,13 @@ function applyExtCardsI18n(){
   document.querySelectorAll('[data-ext-i18n]').forEach(function(el){
     var p=el.dataset.extI18n.split(':');
     el.textContent=extT(p[0],p[1],el.dataset.fallback||el.textContent);
+  });
+  document.querySelectorAll('[data-ext-chips]').forEach(function(el){
+    var id=el.dataset.extChips;
+    var blocks=(extT(id,'meta.blockTypes',el.dataset.blockFallback||'')||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var tags=(extT(id,'meta.tags',el.dataset.tagFallback||'')||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+    el.innerHTML=blocks.map(function(s){return '<span class="chip chip-block">'+escHtml(s)+'</span>';}).join('')+
+      tags.map(function(s){return '<span class="chip chip-tag">#'+escHtml(s)+'</span>';}).join('');
   });
 }
 applyExtCardsI18n();

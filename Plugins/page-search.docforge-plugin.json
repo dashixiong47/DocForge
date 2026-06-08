@@ -1,0 +1,75 @@
+{
+  "slug": "page-search",
+  "name": "Page Search",
+  "description": "Topbar in-page search for documentation pages.",
+  "version": "1.1.0",
+  "author": "DocForge",
+  "icon": "🔎",
+  "homepage": "",
+  "type": "system",
+  "html": "",
+  "css": ".topbar-inner{gap:14px}.topbar-actions{gap:10px}.df-search-box{position:relative;width:min(420px,34vw);min-width:220px}.df-search-input-wrap{display:flex;align-items:center;gap:8px;height:34px;border:1px solid var(--c-border);border-radius:8px;background:var(--c-surface);padding:0 10px;color:var(--c-muted);transition:.14s}.df-search-input-wrap:focus-within{border-color:var(--c-accent);box-shadow:0 0 0 3px rgba(88,166,255,.12);color:var(--c-accent)}.df-search-icon{flex-shrink:0;opacity:.78}.df-search-input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--c-text);font:inherit;font-size:13px;height:100%}.df-search-input::placeholder{color:var(--c-muted)}.df-search-kbd{font-family:var(--mono);font-size:10px;color:var(--c-muted);border:1px solid var(--c-border);border-radius:5px;padding:1px 5px;background:var(--c-bg)}.df-search-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:8801;width:min(520px,calc(100vw - 32px));max-height:min(520px,calc(100vh - 120px));background:var(--c-surface);border:1px solid var(--c-border);border-radius:12px;box-shadow:0 18px 60px rgba(0,0,0,.42);display:none;overflow:hidden}.df-search-panel.open{display:flex;flex-direction:column}.df-search-results{overflow:auto;padding:8px}.df-search-empty{padding:18px 10px;color:var(--c-muted);font-size:13px;text-align:center}.df-search-item{display:block;width:100%;text-align:left;padding:10px;border:0;border-radius:8px;background:transparent;color:var(--c-text);cursor:pointer}.df-search-item:hover,.df-search-item.active{background:rgba(88,166,255,.1)}.df-search-title{font-size:13px;font-weight:700;margin-bottom:4px}.df-search-snippet{font-size:12px;line-height:1.45;color:var(--c-muted)}.df-search-mark{background:rgba(210,153,34,.35);color:var(--c-text);border-radius:3px;padding:0 2px}.df-search-target{animation:dfSearchPulse 1.8s ease-out}@keyframes dfSearchPulse{0%{box-shadow:0 0 0 0 rgba(88,166,255,.36)}100%{box-shadow:0 0 0 18px rgba(88,166,255,0)}}@media(max-width:900px){.topbar-inner{flex-wrap:wrap;height:auto;min-height:56px;padding-top:10px;padding-bottom:10px}.topbar-title{flex:1}.topbar-actions{width:100%;justify-content:space-between}.df-search-box{order:-1;width:calc(100% - 160px);min-width:0}.df-search-kbd{display:none}}@media(max-width:560px){.topbar-actions{gap:8px}.df-search-box{width:100%;order:2}.doc-lp{order:1;margin-left:auto}}",
+  "js": "(function(){function esc(s){return String(s==null?'':s).replace(/[&<>\\\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\\\"':'&quot;'}[c];});}function label(t,k,f){return t(k)||f;}function clean(s){return String(s||'').replace(/\\s+/g,' ').trim();}function isHidden(el){return !!(el.offsetParent===null&&getComputedStyle(el).position!=='fixed');}function collect(){return Array.from(document.querySelectorAll('.content section,.content .subsection')).filter(function(el){return !isHidden(el);}).map(function(el){var h=el.querySelector('h2,h3,h4');return {id:el.id,title:clean(h?h.textContent:el.id),text:clean(el.textContent)};}).filter(function(x){return x.id&&x.text;});}function mark(text,q){if(!q)return esc(text);var i=text.toLowerCase().indexOf(q.toLowerCase());if(i<0)return esc(text.slice(0,180));var a=Math.max(0,i-70),b=Math.min(text.length,i+q.length+110);return esc((a?'...':'')+text.slice(a,i))+'<span class=\"df-search-mark\">'+esc(text.slice(i,i+q.length))+'</span>'+esc(text.slice(i+q.length,b)+(b<text.length?'...':''));}function setup(t){if(document.querySelector('.df-search-box'))return;var actions=document.querySelector('.topbar-actions');if(!actions)return;var data=collect();var box=document.createElement('div');box.className='df-search-box';box.innerHTML='<div class=\"df-search-input-wrap\"><svg class=\"df-search-icon\" width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"7\"></circle><path d=\"m20 20-3.5-3.5\"></path></svg><input class=\"df-search-input\" type=\"search\" autocomplete=\"off\" placeholder=\"'+esc(label(t,'search.placeholder','Search this page'))+'\"><span class=\"df-search-kbd\">Ctrl K</span></div><div class=\"df-search-panel\"><div class=\"df-search-results\"></div></div>';actions.insertBefore(box,actions.firstChild);var input=box.querySelector('.df-search-input'),panel=box.querySelector('.df-search-panel'),results=box.querySelector('.df-search-results');function open(){panel.classList.add('open');render();}function close(){panel.classList.remove('open');}function render(){var q=clean(input.value).toLowerCase();var hits=q?data.filter(function(x){return x.text.toLowerCase().indexOf(q)>=0||x.title.toLowerCase().indexOf(q)>=0;}).slice(0,24):[];if(!q){results.innerHTML='<div class=\"df-search-empty\">'+esc(label(t,'search.hint','Type to search sections on this page.'))+'</div>';return;}if(!hits.length){results.innerHTML='<div class=\"df-search-empty\">'+esc(label(t,'search.empty','No results'))+'</div>';return;}results.innerHTML=hits.map(function(x){return '<button type=\"button\" class=\"df-search-item\" data-id=\"'+esc(x.id)+'\"><div class=\"df-search-title\">'+esc(x.title)+'</div><div class=\"df-search-snippet\">'+mark(x.text,q)+'</div></button>';}).join('');}input.addEventListener('focus',open);input.addEventListener('input',open);input.addEventListener('keydown',function(e){var items=Array.from(results.querySelectorAll('.df-search-item'));var cur=results.querySelector('.df-search-item.active');var idx=cur?items.indexOf(cur):-1;if(e.key==='ArrowDown'&&items.length){e.preventDefault();if(cur)cur.classList.remove('active');items[Math.min(items.length-1,idx+1)].classList.add('active');}else if(e.key==='ArrowUp'&&items.length){e.preventDefault();if(cur)cur.classList.remove('active');items[Math.max(0,idx-1)].classList.add('active');}else if(e.key==='Enter'){var btn=cur||items[0];if(btn){e.preventDefault();jump(btn.dataset.id);}}else if(e.key==='Escape'){close();input.blur();}});function jump(id){var el=document.getElementById(id);if(!el)return;close();input.blur();el.classList.remove('df-search-target');el.scrollIntoView({behavior:'smooth',block:'start'});history.replaceState(null,'','#'+el.id);setTimeout(function(){el.classList.add('df-search-target');setTimeout(function(){el.classList.remove('df-search-target');},1900);},260);}results.addEventListener('click',function(e){var btn=e.target.closest('.df-search-item');if(btn)jump(btn.dataset.id);});document.addEventListener('click',function(e){if(!box.contains(e.target))close();});document.addEventListener('keydown',function(e){if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();input.focus();input.select();open();}});}DocForge.register({id:'page-search',onLoad:function(){setup(t);}});})();",
+  "headHtml": "",
+  "blockTypes": [],
+  "tags": [
+    "search",
+    "navigation"
+  ],
+  "i18n": {
+    "meta.name": {
+      "zh": "页面搜索",
+      "en": "Page Search"
+    },
+    "meta.slug": {
+      "zh": "page-search",
+      "en": "page-search"
+    },
+    "meta.type": {
+      "zh": "系统",
+      "en": "System"
+    },
+    "meta.version": {
+      "zh": "1.1.0",
+      "en": "1.1.0"
+    },
+    "meta.author": {
+      "zh": "DocForge",
+      "en": "DocForge"
+    },
+    "meta.description": {
+      "zh": "在文档顶栏提供搜索输入框、章节命中、键盘选择和跳转高亮。",
+      "en": "Topbar search input with section results, keyboard selection, and jump highlighting."
+    },
+    "meta.homepage": {
+      "zh": "",
+      "en": ""
+    },
+    "meta.tags": {
+      "zh": "搜索,导航",
+      "en": "search,navigation"
+    },
+    "meta.blockTypes": {
+      "zh": "",
+      "en": ""
+    },
+    "search.open": {
+      "zh": "搜索本页",
+      "en": "Search this page"
+    },
+    "search.placeholder": {
+      "zh": "搜索本页内容",
+      "en": "Search this page"
+    },
+    "search.hint": {
+      "zh": "输入关键词搜索当前页面章节。",
+      "en": "Type to search sections on this page."
+    },
+    "search.empty": {
+      "zh": "没有结果",
+      "en": "No results"
+    }
+  },
+  "configSchema": {},
+  "config": {}
+}

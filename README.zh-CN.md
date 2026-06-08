@@ -219,6 +219,13 @@ mkdir PrivatePlugins
 
 `Plugins/` 会提交到 git。`PrivatePlugins/` 默认被 git 忽略，可以用来保存本地 manifest 备份或私有插件文件，不会跟随开源项目发布。
 
+`Plugins/*.docforge-plugin.json` 里的官方插件会在迁移后同步到 D1：
+
+```bash
+npm run plugins:sync          # 本地 D1
+npm run plugins:sync:remote   # Cloudflare D1
+```
+
 ---
 
 ## 项目结构

@@ -201,6 +201,7 @@ const DOC_UI: Record<string, Record<string, string>> = {
   'main.empty':      { zh: '暂无文档内容', en: 'No documentation yet.' },
   'home.noPlugins':  { zh: '暂无插件',  en: 'No plugins yet.' },
   'home.enterAdmin': { zh: '进入管理后台', en: 'Go to admin panel' },
+  'nav.backTop':     { zh: '回到顶部', en: 'Back to top' },
 };
 
 function docUI(key: string, lang: string): string {
@@ -332,6 +333,10 @@ ${extDocTransHtml}
 .code-block pre{margin:0;border:0;border-radius:0;box-shadow:none;background:transparent}
 .code-block pre code{white-space:pre}
 .code-block pre code.hljs{padding:16px 20px;background:transparent}
+.back-top{position:fixed;right:22px;bottom:24px;z-index:8700;width:42px;height:42px;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface);color:var(--c-muted);box-shadow:var(--shadow-sm);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .16s,visibility .16s,transform .16s,color .16s,border-color .16s}
+.back-top.visible{opacity:1;visibility:visible;transform:translateY(0)}
+.back-top:hover{color:var(--c-accent);border-color:var(--c-accent)}
+@media(max-width:720px){.back-top{right:16px;bottom:22px}}
 </style>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
@@ -399,6 +404,12 @@ ${extDocTransHtml}
     }).filter(Boolean);
     var tocLockUntil = 0;
     var tocLockTarget = '';
+    var backTopBtn = document.getElementById('back-top');
+    if (backTopBtn) {
+      backTopBtn.addEventListener('click', function() {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
 
     function setActiveToc(id) {
       tocLinks.forEach(function(l) {
@@ -437,6 +448,7 @@ ${extDocTransHtml}
         else break;
       }
       if (best) setActiveToc(best.id);
+      if (backTopBtn) backTopBtn.classList.toggle('visible', window.scrollY > 420);
     }
     window.addEventListener('scroll', onScroll, { passive: true });
 
@@ -507,6 +519,9 @@ ${sections.length > 0
 <footer style="text-align:center;padding:40px 24px;color:var(--c-muted);font-size:13px;border-top:1px solid var(--c-border);margin-top:24px">
   ${settings.footer_text ? settings.footer_text : `&copy; ${new Date().getFullYear()} ${esc(plugin.name)} Documentation`}
 </footer>
+<button id="back-top" class="back-top" type="button" aria-label="${esc(docUI('nav.backTop', lang))}" title="${esc(docUI('nav.backTop', lang))}">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
+</button>
 ${plugin.customJs ? `<script>/* doc: ${esc(plugin.slug)} */\n${plugin.customJs}\n</script>` : ''}
 ${extScriptsHtml}
 </body></html>`;

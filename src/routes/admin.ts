@@ -263,7 +263,7 @@ adminRoutes.get('/settings/account', (c) => c.html(adminPage.accountSettings()))
 adminRoutes.get('/extensions', async (c) => {
   const db = c.get('db');
   const exts = await loadAllExtensions(db);
-  return c.html(extensionsList(exts));
+  return c.html(extensionsList(exts, getLang(c)));
 });
 
 adminRoutes.get('/extensions/install', (c) => c.redirect('/admin/extensions'));

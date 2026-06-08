@@ -1,0 +1,117 @@
+{
+  "slug": "media-viewer",
+  "name": "Media Viewer",
+  "description": "Responsive media components for images, galleries, and videos.",
+  "version": "1.0.0",
+  "author": "DocForge",
+  "icon": "🖼️",
+  "homepage": "",
+  "type": "widget",
+  "html": "<template data-tag=\"media-image\">\n  <figure class=\"df-media\" style=\"--df-fit:{{attr:fit}}\">\n    <img class=\"df-media-img is-clickable\" src=\"{{media:attr:key|src}}\" alt=\"{{attr:alt}}\" loading=\"lazy\" data-df-lightbox=\"image\" />\n    <figcaption class=\"df-media-caption\">{{attr:caption}}</figcaption>\n  </figure>\n</template>\n\n<template data-tag=\"media-video\">\n  <figure class=\"df-media\">\n    <video class=\"df-video\" src=\"{{media:attr:key|src}}\" poster=\"{{media:attr:poster}}\" controls></video>\n    <figcaption class=\"df-media-caption\">{{attr:caption}}</figcaption>\n  </figure>\n</template>\n\n<template data-tag=\"media-gallery\">\n  <figure class=\"df-media df-gallery\" style=\"--df-fit:{{attr:fit}};--df-ratio:{{attr:ratio}};--df-min:{{attr:min}}\">\n    <div class=\"df-gallery-grid\" data-df-gallery-keys=\"{{attr:keys|key}}\" data-df-gallery-mode=\"{{attr:mode|layout}}\" data-df-lightbox=\"{{attr:lightbox}}\"></div>\n    <figcaption class=\"df-media-caption\">{{attr:caption}}</figcaption>\n  </figure>\n</template>",
+  "css": ".df-media {\n  margin: 14px 0;\n  color: var(--c-text)\n}\n\n.df-media-img {\n  display: block;\n  width: 100%;\n  max-width: 100%;\n  height: auto;\n  border-radius: 8px;\n  object-fit: var(--df-fit,contain);\n  background: var(--c-surface);\n  border: 1px solid var(--c-border)\n}\n\n.df-media-img.is-clickable,.content img.is-clickable {\n  cursor: zoom-in\n}\n\n.df-media-caption {\n  margin-top: 7px;\n  color: var(--c-muted);\n  font-size: 13px;\n  line-height: 1.5\n}\n\n.df-media-missing {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  min-height: 160px;\n  border: 1.5px dashed var(--c-border);\n  border-radius: 8px;\n  background: rgba(22,27,34,.35);\n  color: var(--c-muted);\n  font-family: var(--mono);\n  font-size: 12px\n}\n\n.df-gallery {\n  display: grid;\n  gap: 10px\n}\n\n.df-gallery-grid {\n  display: grid;\n  grid-template-columns: repeat(auto-fit,minmax(var(--df-min,220px),1fr));\n  gap: 10px\n}\n\n.df-gallery-scroll {\n  display: flex;\n  gap: 10px;\n  overflow-x: auto;\n  scroll-snap-type: x mandatory;\n  padding-bottom: 8px\n}\n\n.df-gallery-scroll .df-gallery-item {\n  flex: 0 0 min(78vw,var(--df-item,420px));\n  scroll-snap-align: start\n}\n\n.df-gallery-item img {\n  width: 100%;\n  aspect-ratio: var(--df-ratio,16/10);\n  object-fit: var(--df-fit,cover)\n}\n\n.df-video {\n  width: 100%;\n  max-width: 100%;\n  border-radius: 8px;\n  background: #000;\n  border: 1px solid var(--c-border);\n  display: block\n}\n\n.df-media-lightbox {\n  position: fixed;\n  inset: 0;\n  z-index: 9200;\n  background: rgba(0,0,0,.88);\n  display: none;\n  align-items: center;\n  justify-content: center;\n  padding: 28px;\n  cursor: zoom-out\n}\n\n.df-media-lightbox.open {\n  display: flex\n}\n\n.df-media-lightbox img,.df-media-lightbox video {\n  max-width: 94vw;\n  max-height: 90vh;\n  object-fit: contain;\n  border-radius: 8px;\n  box-shadow: 0 18px 60px rgba(0,0,0,.55)\n}\n\n.df-media-close {\n  position: absolute;\n  right: 18px;\n  top: 16px;\n  width: 36px;\n  height: 36px;\n  border: 1px solid rgba(255,255,255,.2);\n  border-radius: 999px;\n  background: rgba(255,255,255,.12);\n  color: #fff;\n  font-size: 20px;\n  cursor: pointer\n}\n\n@media(max-width:720px) {\n  .df-gallery-grid {\n    grid-template-columns: 1fr\n  }\n\n  .df-gallery-scroll .df-gallery-item {\n    flex-basis: 86vw\n  }}",
+  "js": "(function(){\n  function esc(s){return String(s==null?'':s).replace(/[&<>\"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c];});}\n  function mediaUrl(key){return (window.DocForge&&DocForge.media(key))||key||'';}\n  function ensureBox(){var box=document.querySelector('.df-media-lightbox');if(box)return box;box=document.createElement('div');box.className='df-media-lightbox';box.innerHTML='<button class=\"df-media-close\" type=\"button\" aria-label=\"Close\">×</button><div class=\"df-media-stage\"></div>';document.body.appendChild(box);box.addEventListener('click',function(e){if(e.target===box||e.target.classList.contains('df-media-close'))closeBox();});document.addEventListener('keydown',function(e){if(e.key==='Escape')closeBox();});return box;}\n  function closeBox(){var box=document.querySelector('.df-media-lightbox');if(!box)return;box.classList.remove('open');box.querySelector('.df-media-stage').innerHTML='';}\n  function setupGalleries(){document.querySelectorAll('[data-df-gallery-keys]').forEach(function(box){if(box.dataset.dfReady)return;box.dataset.dfReady='1';var mode=box.dataset.dfGalleryMode||'grid';box.className=mode==='scroll'?'df-gallery-scroll':'df-gallery-grid';var light=box.dataset.dfLightbox!== 'false';var keys=(box.dataset.dfGalleryKeys||'').split(/[,s]+/).map(function(k){return k.trim();}).filter(Boolean);box.innerHTML=keys.map(function(key){var src=mediaUrl(key);return '<div class=\"df-gallery-item\"><img class=\"df-media-img'+(light?' is-clickable':'')+'\" src=\"'+esc(src)+'\" alt=\"\" loading=\"lazy\" data-df-lightbox=\"'+(light?'image':'')+'\"></div>';}).join('');});}\n  function setupLightbox(){document.querySelectorAll('.content img:not([data-df-no-lightbox]),[data-df-lightbox=\"image\"]').forEach(function(img){if(img.dataset.dfLightboxReady)return;img.dataset.dfLightboxReady='1';img.classList.add('is-clickable');img.addEventListener('click',function(){var box=ensureBox();box.querySelector('.df-media-stage').innerHTML='<img src=\"'+esc(img.currentSrc||img.src)+'\" alt=\"'+esc(img.alt||'')+'\">';box.classList.add('open');});});}\n  DocForge.register({id:'media-viewer',tagSchema:{'media-image':{description:'Render one image by media key or URL.',attrs:['key','src','alt','caption','fit','lightbox']},'media-video':{description:'Render one video by media key or URL.',attrs:['key','src','poster','caption','controls','autoplay','loop']},'media-gallery':{description:'Render multiple images by media keys or URLs.',attrs:['keys','mode','fit','ratio','min','caption','lightbox']}},onLoad:function(){setupGalleries();setupLightbox();}});\n})();",
+  "blockTypes": [],
+  "tags": [
+    "media-image",
+    "media-video",
+    "media-gallery"
+  ],
+  "i18n": {
+    "meta.name": {
+      "zh": "媒体查看器",
+      "en": "Media Viewer"
+    },
+    "meta.slug": {
+      "zh": "media-viewer",
+      "en": "media-viewer"
+    },
+    "meta.type": {
+      "zh": "组件",
+      "en": "widget"
+    },
+    "meta.version": {
+      "zh": "1.0.0",
+      "en": "1.0.0"
+    },
+    "meta.author": {
+      "zh": "DocForge",
+      "en": "DocForge"
+    },
+    "meta.description": {
+      "zh": "用于图片、画廊和视频的响应式媒体组件。",
+      "en": "Responsive media components for images, galleries, and videos."
+    },
+    "meta.homepage": {
+      "zh": "",
+      "en": ""
+    },
+    "meta.tags": {
+      "zh": "media-image,media-video,media-gallery",
+      "en": "media-image,media-video,media-gallery"
+    },
+    "meta.blockTypes": {
+      "zh": "",
+      "en": ""
+    },
+    "media.image": {
+      "zh": "媒体图片",
+      "en": "Media image"
+    },
+    "media.video": {
+      "zh": "媒体视频",
+      "en": "Media video"
+    },
+    "media.gallery": {
+      "zh": "媒体画廊",
+      "en": "Media gallery"
+    },
+    "media.lightbox": {
+      "zh": "点击放大",
+      "en": "Lightbox"
+    },
+    "media.scroll": {
+      "zh": "横向滚动",
+      "en": "Horizontal scroll"
+    }
+  },
+  "configSchema": {
+    "tagSchema": {
+      "media-image": {
+        "description": "Render one image by media key or URL.",
+        "attrs": [
+          "key",
+          "src",
+          "alt",
+          "caption",
+          "fit",
+          "lightbox"
+        ]
+      },
+      "media-video": {
+        "description": "Render one video by media key or URL.",
+        "attrs": [
+          "key",
+          "src",
+          "poster",
+          "caption",
+          "controls",
+          "autoplay",
+          "loop"
+        ]
+      },
+      "media-gallery": {
+        "description": "Render multiple images by media keys or URLs.",
+        "attrs": [
+          "keys",
+          "mode",
+          "fit",
+          "ratio",
+          "min",
+          "caption",
+          "lightbox"
+        ]
+      }
+    }
+  },
+  "config": {}
+}

@@ -6,8 +6,10 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "secrets:push": "node tools/push-dev-vars-secrets.mjs",
-    "db:init": "node tools/migrate-d1.mjs --local",
-    "db:migrate:remote": "node tools/migrate-d1.mjs --remote",
+    "plugins:sync": "node tools/sync-official-plugins.mjs --local",
+    "plugins:sync:remote": "node tools/sync-official-plugins.mjs --remote",
+    "db:init": "node tools/migrate-d1.mjs --local && npm run plugins:sync",
+    "db:migrate:remote": "node tools/migrate-d1.mjs --remote && npm run plugins:sync:remote",
     "deploy:local": "npm run secrets:push && npm run db:migrate:remote && wrangler deploy",
     "typecheck": "tsc --noEmit"
   },

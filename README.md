@@ -219,6 +219,13 @@ mkdir PrivatePlugins
 
 `Plugins/` is committed. `PrivatePlugins/` is ignored by git by default. Use `PrivatePlugins/` for local manifest backups or private plugin work that should not be published with the open-source project.
 
+Official plugins in `Plugins/*.docforge-plugin.json` are synced into D1 after migrations:
+
+```bash
+npm run plugins:sync          # local D1
+npm run plugins:sync:remote   # Cloudflare D1
+```
+
 ---
 
 ## Project Structure
