@@ -21,18 +21,24 @@ export const plugins = (all: any[]) => adminLayout({
           <strong>${esc(p.name)}</strong>
           <span class="doc-slug">/${esc(p.slug)}</span>
           <span class="doc-ver">v${esc(p.version)}</span>
-          <span class="doc-status ${p.enabled?'published':'draft'}" id="doc-badge-${p.id}" data-i18n="${p.enabled?'docs.published':'docs.draft'}">${p.enabled?'已发布':'草稿'}</span>
+          <span class="doc-status ${p.enabled?'published':'draft'}" id="doc-badge-${p.id}" data-i18n="${p.enabled?'docs.enabled':'docs.disabled'}">${p.enabled?'已启用':'已禁用'}</span>
+          <span class="doc-status ${p.listed?'published':'draft'}" id="doc-listed-badge-${p.id}" data-i18n="${p.listed?'docs.listed':'docs.unlisted'}">${p.listed?'首页展示':'不进首页'}</span>
         </div>
         ${p.description?`<p class="doc-desc">${esc(String(p.description).substring(0,100))}</p>`:''}
       </div>
       <button class="btn btn-outline btn-sm" onclick="toggleEditP(${p.id})" data-i18n-title="docs.editInfo" title="编辑信息" style="flex-shrink:0;padding:3px 8px;color:var(--muted)">⚙</button>
     </div>
     <div class="doc-actions">
-      <label class="toggle" data-i18n-title="${p.enabled?'docs.unpublish':'docs.publish'}" title="${p.enabled?'点击下线':'点击发布'}">
+      <label class="toggle" data-i18n-title="${p.enabled?'docs.disableDoc':'docs.enableDoc'}" title="${p.enabled?'点击禁用访问':'点击启用访问'}">
         <input type="checkbox" ${p.enabled?'checked':''} onchange="togglePlugin(${p.id},this)">
         <span class="toggle-slider"></span>
       </label>
-      <span class="doc-status-lbl" id="doc-lbl-${p.id}" data-i18n="${p.enabled?'docs.published':'docs.draft'}">${p.enabled?'已发布':'草稿'}</span>
+      <span class="doc-status-lbl" id="doc-lbl-${p.id}" data-i18n="${p.enabled?'docs.enabled':'docs.disabled'}">${p.enabled?'已启用':'已禁用'}</span>
+      <label class="toggle" data-i18n-title="${p.listed?'docs.hideFromHome':'docs.showOnHome'}" title="${p.listed?'从首页隐藏':'在首页展示'}">
+        <input type="checkbox" ${p.listed?'checked':''} onchange="toggleListed(${p.id},this)">
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="doc-status-lbl" id="doc-listed-lbl-${p.id}" data-i18n="${p.listed?'docs.listed':'docs.unlisted'}">${p.listed?'首页展示':'不进首页'}</span>
       <div style="margin-left:auto;display:flex;gap:6px">
         <a href="/admin/plugins/${p.id}/editor" class="btn btn-primary btn-sm" data-i18n="docs.editor">✏️ 编辑器</a>
         <a href="/${esc(p.slug)}" target="_blank" class="btn btn-outline btn-sm" style="${p.enabled?'':'opacity:.4;pointer-events:none'}" data-i18n-title="${p.enabled?'docs.viewPublic':'docs.previewAfterPublish'}" title="${p.enabled?'查看公开页面':'发布后可预览'}">↗ <span data-i18n="docs.preview">预览</span></a>
@@ -42,7 +48,7 @@ export const plugins = (all: any[]) => adminLayout({
     <div class="doc-edit" id="edit-form-${p.id}" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
       <div class="form-row"><div class="form-group"><label data-i18n="docs.slug">标识 (slug)</label><input id="eslug-${p.id}" value="${esc(p.slug)}"></div><div class="form-group"><label data-i18n="docs.name">名称</label><input id="ename-${p.id}" value="${esc(p.name)}"></div><div class="form-group"><label data-i18n="docs.version">版本</label><input id="ever-${p.id}" value="${esc(p.version)}" style="max-width:120px"></div></div>
       <div class="form-group"><label data-i18n="docs.desc">描述</label><textarea id="edesc-${p.id}" rows="2" style="min-height:46px">${esc(p.description||'')}</textarea></div>
-      <div class="form-row"><div class="form-group" style="flex:1"><label data-i18n="docs.icon">图标</label><div style="display:flex;gap:6px;align-items:center">${p.iconUrl?`<img src="${esc(p.iconUrl)}" style="width:40px;height:40px;border-radius:4px;object-fit:cover;border:1px solid var(--border)" onerror="this.style.display='none'" id="icon-preview-${p.id}">`:''}<input id="eicon-${p.id}" value="${esc(p.iconUrl||'')}" type="hidden"><button type="button" class="btn btn-outline btn-sm" onclick="openMediaPicker('${esc(p.slug)}','eicon-${p.id}','icon-preview-${p.id}')" style="flex-shrink:0" data-i18n="${p.iconUrl?'docs.changeIcon':'docs.selectIcon'}">${p.iconUrl?'更换图标':'选择图标'}</button></div></div><div class="form-group" style="flex:1"><label data-i18n="docs.sort">排序</label><input id="esort-${p.id}" type="number" value="${p.sortOrder||0}" style="max-width:100px"></div></div>
+      <div class="form-row"><div class="form-group" style="flex:1"><label data-i18n="docs.icon">图标</label><div style="display:flex;gap:6px;align-items:center">${p.iconUrl?`<img src="${esc(p.iconUrl)}" style="width:40px;height:40px;border-radius:4px;object-fit:cover;border:1px solid var(--border)" onerror="this.style.display='none'" id="icon-preview-${p.id}">`:''}<input id="eicon-${p.id}" value="${esc(p.iconUrl||'')}" type="hidden"><button type="button" class="btn btn-outline btn-sm" onclick="openMediaPicker('${esc(p.slug)}','eicon-${p.id}','icon-preview-${p.id}')" style="flex-shrink:0" data-i18n="${p.iconUrl?'docs.changeIcon':'docs.selectIcon'}">${p.iconUrl?'更换图标':'选择图标'}</button></div></div><div class="form-group" style="flex:1"><label data-i18n="docs.sort">排序</label><input id="esort-${p.id}" type="number" value="${p.sortOrder||0}" style="max-width:100px"></div><div class="form-group" style="flex:1"><label data-i18n="docs.homeVisible">首页展示</label><label style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="elisted-${p.id}" type="checkbox" ${p.listed?'checked':''}> <span data-i18n="docs.listedHint">启用后显示在首页列表</span></label></div></div>
       <div class="form-group"><label data-i18n="docs.tags">标签</label><div class="tag-input-wrap" id="tag-wrap-${p.id}" onclick="this.querySelector('input').focus()"></div></div>
       <div class="btn-group" style="margin-top:8px;justify-content:flex-end"><button class="btn btn-primary btn-sm" onclick="saveEditP(${p.id})" data-i18n="docs.save">保存</button><button class="btn btn-outline btn-sm" onclick="toggleEditP(${p.id})" data-i18n="docs.cancel">取消</button></div>
     </div>
@@ -86,7 +92,7 @@ async function loadMediaPicker(){var s=document.getElementById('mp-search').valu
 function selectMediaItem(id,d2k,mt){mpSelected={id:id,d2key:d2k,mimeType:mt};document.getElementById('mp-url').value='/media/'+d2k;document.getElementById('mp-selected').style.display='';document.getElementById('mp-selected').textContent='已选: /media/'+d2k;var p=document.getElementById('mp-preview');if(/^image\\//.test(mt)){p.src='/media/'+d2k;p.style.display='';}else{p.style.display='none';}loadMediaPicker();}
 function confirmMediaPick(){var url=document.getElementById('mp-url').value.trim();if(!url)return;if(!mpTargetId)return;document.getElementById(mpTargetId).value=url;if(mpPreviewId){var p=document.getElementById(mpPreviewId);if(!p){p=document.createElement('img');p.id=mpPreviewId;p.style.cssText='width:40px;height:40px;border-radius:4px;object-fit:cover;border:1px solid var(--border)';p.onerror=function(){this.style.display='none';};document.getElementById(mpTargetId).parentElement.insertBefore(p,document.getElementById(mpTargetId).nextSibling);}p.src=url;p.style.display='';}closeModal('m-pickmedia');}
 
-async function saveEditP(id){var d={slug:document.getElementById('eslug-'+id).value,name:document.getElementById('ename-'+id).value,version:document.getElementById('ever-'+id).value,description:document.getElementById('edesc-'+id).value,iconUrl:document.getElementById('eicon-'+id).value,sortOrder:Number(document.getElementById('esort-'+id).value),badgeTags:JSON.stringify(tagData[id]||[])};await fetch('/api/admin/plugins/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});location.reload();}
+async function saveEditP(id){var d={slug:document.getElementById('eslug-'+id).value,name:document.getElementById('ename-'+id).value,version:document.getElementById('ever-'+id).value,description:document.getElementById('edesc-'+id).value,iconUrl:document.getElementById('eicon-'+id).value,sortOrder:Number(document.getElementById('esort-'+id).value),listed:document.getElementById('elisted-'+id).checked,badgeTags:JSON.stringify(tagData[id]||[])};await fetch('/api/admin/plugins/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});location.reload();}
 async function delP(id){if(!confirm(window.t?window.t('docs.confirmDelete'):'删除该文档及所有内容？'))return;await fetch('/api/admin/plugins/'+id,{method:'DELETE'});location.reload();}
 async function togglePlugin(id,cb){
   var r=await fetch('/api/admin/plugins/'+id+'/toggle',{method:'PUT'});
@@ -97,12 +103,27 @@ async function togglePlugin(id,cb){
     var lbl=document.getElementById('doc-lbl-'+id);
     var card=cb.closest('.doc-card');
     var prev=card.querySelector('a[target="_blank"]');
-    if(badge){badge.dataset.i18n=pub?'docs.published':'docs.draft';badge.textContent=window.t?window.t(badge.dataset.i18n):(pub?'已发布':'草稿');badge.className='doc-status '+(pub?'published':'draft');}
-    if(lbl){lbl.dataset.i18n=pub?'docs.published':'docs.draft';lbl.textContent=window.t?window.t(lbl.dataset.i18n):(pub?'已发布':'草稿');}
-    var toggle=cb.closest('.toggle');if(toggle){toggle.dataset.i18nTitle=pub?'docs.unpublish':'docs.publish';toggle.title=window.t?window.t(toggle.dataset.i18nTitle):(pub?'点击下线':'点击发布');}
+    if(badge){badge.dataset.i18n=pub?'docs.enabled':'docs.disabled';badge.textContent=window.t?window.t(badge.dataset.i18n):(pub?'已启用':'已禁用');badge.className='doc-status '+(pub?'published':'draft');}
+    if(lbl){lbl.dataset.i18n=pub?'docs.enabled':'docs.disabled';lbl.textContent=window.t?window.t(lbl.dataset.i18n):(pub?'已启用':'已禁用');}
+    var toggle=cb.closest('.toggle');if(toggle){toggle.dataset.i18nTitle=pub?'docs.disableDoc':'docs.enableDoc';toggle.title=window.t?window.t(toggle.dataset.i18nTitle):(pub?'点击禁用访问':'点击启用访问');}
     if(prev){prev.dataset.i18nTitle=pub?'docs.viewPublic':'docs.previewAfterPublish';prev.title=window.t?window.t(prev.dataset.i18nTitle):(pub?'查看公开页面':'发布后可预览');}
     if(prev){prev.style.opacity=pub?'':'0.4';prev.style.pointerEvents=pub?'':'none';}
     cb.checked=pub;
+  }else{cb.checked=!cb.checked;alert(window.t?window.t('docs.operationFailed'):'操作失败');}
+}
+async function toggleListed(id,cb){
+  var r=await fetch('/api/admin/plugins/'+id+'/listed-toggle',{method:'PUT'});
+  var d=await r.json();
+  if(d.ok){
+    var listed=!!d.listed;
+    var badge=document.getElementById('doc-listed-badge-'+id);
+    var lbl=document.getElementById('doc-listed-lbl-'+id);
+    var edit=document.getElementById('elisted-'+id);
+    if(badge){badge.dataset.i18n=listed?'docs.listed':'docs.unlisted';badge.textContent=window.t?window.t(badge.dataset.i18n):(listed?'首页展示':'不进首页');badge.className='doc-status '+(listed?'published':'draft');}
+    if(lbl){lbl.dataset.i18n=listed?'docs.listed':'docs.unlisted';lbl.textContent=window.t?window.t(lbl.dataset.i18n):(listed?'首页展示':'不进首页');}
+    var toggle=cb.closest('.toggle');if(toggle){toggle.dataset.i18nTitle=listed?'docs.hideFromHome':'docs.showOnHome';toggle.title=window.t?window.t(toggle.dataset.i18nTitle):(listed?'从首页隐藏':'在首页展示');}
+    if(edit)edit.checked=listed;
+    cb.checked=listed;
   }else{cb.checked=!cb.checked;alert(window.t?window.t('docs.operationFailed'):'操作失败');}
 }
 document.getElementById('pf-add').addEventListener('submit',async e=>{e.preventDefault();var s=document.getElementById('add-slug').value.trim(),n=document.getElementById('add-name').value.trim();if(!s||!n)return;await fetch('/api/admin/plugins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:s,name:n})});location.reload();});

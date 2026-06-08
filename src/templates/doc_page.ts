@@ -201,6 +201,8 @@ const DOC_UI: Record<string, Record<string, string>> = {
   'main.empty':      { zh: '暂无文档内容', en: 'No documentation yet.' },
   'home.noPlugins':  { zh: '暂无插件',  en: 'No plugins yet.' },
   'home.enterAdmin': { zh: '进入管理后台', en: 'Go to admin panel' },
+  'home.openDoc':    { zh: '打开文档', en: 'Open docs' },
+  'home.available':  { zh: '可用文档', en: 'Available docs' },
   'nav.backTop':     { zh: '回到顶部', en: 'Back to top' },
 };
 
@@ -718,19 +720,27 @@ ${extI18nHtml}
 ${extMediaHtml}
 ${extTemplatesHtml}
 <style>
-.home-hero{text-align:center;padding:80px 24px 48px}
-.home-hero h1{font-size:clamp(36px,5vw,56px);margin-bottom:12px}
-.home-hero h1 span{color:var(--c-accent)}
-.home-hero p{font-size:18px;max-width:600px;margin:0 auto 32px}
-.plugin-list{max-width:800px;margin:0 auto;padding:0 24px 60px;display:grid;gap:16px}
-.plugin-card{display:flex;align-items:center;gap:16px;padding:20px 24px;border:1px solid var(--c-border);border-radius:var(--radius);background:var(--c-surface);transition:.15s}
-.plugin-card:hover{border-color:var(--c-accent);box-shadow:var(--shadow)}
-.plugin-card-icon{width:48px;height:48px;border-radius:10px;background:var(--c-code-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;overflow:hidden}
+.home-shell{max-width:1120px;margin:0 auto;padding:46px 24px 72px}
+.home-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:end;margin-bottom:28px}
+.home-eyebrow{margin:0 0 10px;color:var(--c-accent);font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.home-hero h1{font-size:clamp(34px,4vw,52px);line-height:1.05;margin:0 0 12px}
+.home-hero p{font-size:16px;line-height:1.65;max-width:700px;margin:0;color:var(--c-muted)}
+.home-count{min-width:132px;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface);padding:14px 16px;text-align:right;box-shadow:var(--shadow-sm)}
+.home-count strong{display:block;font-size:28px;color:var(--c-text)}
+.home-count span{font-size:12px;color:var(--c-muted)}
+.plugin-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.plugin-card{display:flex;flex-direction:column;gap:14px;min-height:178px;padding:18px;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface);transition:.15s;position:relative;overflow:hidden}
+.plugin-card:hover{border-color:var(--c-accent);box-shadow:var(--shadow);transform:translateY(-1px)}
+.plugin-card-top{display:flex;align-items:center;gap:12px}
+.plugin-card-icon{width:46px;height:46px;border-radius:10px;background:var(--c-code-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;overflow:hidden}
 .plugin-card-icon img{width:100%;height:100%;object-fit:cover}
 .plugin-card-info{flex:1;min-width:0}
-.plugin-card-info h3{margin:0;font-size:18px;color:var(--c-text)}
-.plugin-card-info p{margin:4px 0 0;font-size:14px;color:var(--c-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.plugin-card-badges{display:flex;gap:6px;flex-shrink:0}
+.plugin-card-info h3{margin:0;font-size:17px;color:var(--c-text)}
+.plugin-card-info p{margin:4px 0 0;font-size:12px;color:var(--c-muted)}
+.plugin-card-desc{margin:0;color:var(--c-muted);font-size:13px;line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.plugin-card-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:auto}
+.plugin-card-badges{display:flex;gap:6px;flex-wrap:wrap}
+.plugin-open{font-size:12px;font-weight:800;color:var(--c-accent);white-space:nowrap}
 .topbar-home{position:sticky;top:0;z-index:100;background:rgba(13,17,23,.9);backdrop-filter:blur(12px);border-bottom:1px solid var(--c-border);padding:10px 0}
 .topbar-inner{max-width:1200px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between}
 .doc-lp{position:relative;display:inline-block}
@@ -741,6 +751,7 @@ ${extTemplatesHtml}
 .doc-lp-menu li{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:14px}
 .doc-lp-menu li:hover{background:rgba(88,166,255,.08);color:var(--c-accent)}
 .doc-lp-menu li.active{color:var(--c-accent);font-weight:600}
+@media(max-width:720px){.home-shell{padding-top:28px}.home-hero{grid-template-columns:1fr}.home-count{text-align:left}.plugin-card{min-height:0}}
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -773,25 +784,41 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </nav>
-<div class="home-hero">
-  <h1>${esc(settings.header_logo_text || 'Plugin Docs')}</h1>
-  <p>${esc(settings.site_subtitle || 'Plugin documentation')}</p>
-</div>
-<div class="plugin-list">
-  ${pluginList.map(p => `
+<main class="home-shell">
+  <section class="home-hero">
+    <div>
+      <p class="home-eyebrow">${esc(settings.header_logo_text || 'Plugin Docs')}</p>
+      <h1>${esc(settings.site_title || 'DocForge')}</h1>
+      <p>${esc(settings.site_subtitle || 'Plugin documentation')}</p>
+    </div>
+    <div class="home-count"><strong>${pluginList.length}</strong><span>${docUI('home.available', lang)}</span></div>
+  </section>
+  <section class="plugin-list">
+    ${pluginList.map(p => {
+      const badgeTags = JSON.parse(p.badgeTags || '[]') as string[];
+      return `
     <a href="/${esc(p.slug)}" class="plugin-card">
-      <div class="plugin-card-icon">${p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="" />` : '<span style="color:var(--c-accent)">&#9679;</span>'}</div>
-      <div class="plugin-card-info">
-        <h3>${esc(p.name)}</h3>
-        <p>${esc(p.description || '')}</p>
+      <div class="plugin-card-top">
+        <div class="plugin-card-icon">${p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="" />` : '<span style="color:var(--c-accent)">&#9679;</span>'}</div>
+        <div class="plugin-card-info">
+          <h3>${esc(p.name)}</h3>
+          <p>/${esc(p.slug)}</p>
+        </div>
       </div>
-      <div class="plugin-card-badges">
-        <span class="badge" style="font-size:11px;padding:4px 8px">v${esc(p.version)}</span>
-        ${p.compatibility ? `<span class="badge ok" style="font-size:11px;padding:4px 8px">${esc(p.compatibility)}</span>` : ''}
+      <p class="plugin-card-desc">${esc(p.description || '')}</p>
+      <div class="plugin-card-foot">
+        <div class="plugin-card-badges">
+          <span class="badge" style="font-size:11px;padding:4px 8px">v${esc(p.version)}</span>
+          ${p.compatibility ? `<span class="badge ok" style="font-size:11px;padding:4px 8px">${esc(p.compatibility)}</span>` : ''}
+          ${badgeTags.slice(0, 2).map(t => `<span class="badge" style="font-size:11px;padding:4px 8px">${esc(t)}</span>`).join('')}
+        </div>
+        <span class="plugin-open">${docUI('home.openDoc', lang)} →</span>
       </div>
-    </a>`).join('')}
-  ${pluginList.length === 0 ? `<p style="text-align:center;color:var(--c-muted);grid-column:1/-1">${docUI('home.noPlugins', lang)}，<a href="/admin">${docUI('home.enterAdmin', lang)}</a></p>` : ''}
-</div>
+    </a>`;
+    }).join('')}
+    ${pluginList.length === 0 ? `<p style="text-align:center;color:var(--c-muted);grid-column:1/-1">${docUI('home.noPlugins', lang)}，<a href="/admin">${docUI('home.enterAdmin', lang)}</a></p>` : ''}
+  </section>
+</main>
 ${extScriptsHtml}
 </body></html>`;
 }

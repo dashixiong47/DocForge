@@ -11,6 +11,7 @@ export const plugins = sqliteTable('plugins', {
   badgeTags: text('badge_tags').default('[]'),
   sortOrder: integer('sort_order').notNull().default(0),
   enabled: integer('enabled').notNull().default(0),
+  listed: integer('listed').notNull().default(1),
   customCss: text('custom_css').default(''),
   customJs:  text('custom_js').default(''),
   createdAt: text('created_at').notNull(),

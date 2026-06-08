@@ -156,7 +156,7 @@ docsRoutes.get('/', async (c) => {
   const db = c.get('db');
   const lang = getLang(c);
   const [allPlugins, settings, enabledExts] = await Promise.all([
-    db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'), eq(plugins.enabled, 1))).orderBy(asc(plugins.sortOrder)).all(),
+    db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'), eq(plugins.enabled, 1), eq(plugins.listed, 1))).orderBy(asc(plugins.sortOrder)).all(),
     getSettingsMap(db),
     loadEnabledExtensions(db),
   ]);

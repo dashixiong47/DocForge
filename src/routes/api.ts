@@ -218,7 +218,7 @@ apiRoutes.get('/admin/plugins', async (c) => {
 
 apiRoutes.post('/admin/plugins', async (c) => {
   const db = c.get('db');
-  const body = await c.req.json<{ slug: string; name: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number }>();
+  const body = await c.req.json<{ slug: string; name: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; enabled?: number | boolean; listed?: number | boolean }>();
   const now = new Date().toISOString();
   const result = await db.insert(plugins).values({
     slug: body.slug,
@@ -229,6 +229,8 @@ apiRoutes.post('/admin/plugins', async (c) => {
     iconUrl: body.iconUrl || '',
     badgeTags: body.badgeTags || '[]',
     sortOrder: body.sortOrder || 0,
+    enabled: body.enabled ? 1 : 0,
+    listed: body.listed === false || body.listed === 0 ? 0 : 1,
     createdAt: now,
     updatedAt: now,
   }).returning().get();
@@ -238,7 +240,7 @@ apiRoutes.post('/admin/plugins', async (c) => {
 apiRoutes.put('/admin/plugins/:id', async (c) => {
   const db = c.get('db');
   const id = Number(c.req.param('id'));
-  const body = await c.req.json<{ slug?: string; name?: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; customCss?: string; customJs?: string }>();
+  const body = await c.req.json<{ slug?: string; name?: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; enabled?: number | boolean; listed?: number | boolean; customCss?: string; customJs?: string }>();
   const now = new Date().toISOString();
   await db.update(plugins).set({
     ...(body.slug ? { slug: body.slug } : {}),
@@ -249,6 +251,8 @@ apiRoutes.put('/admin/plugins/:id', async (c) => {
     ...(body.iconUrl !== undefined ? { iconUrl: body.iconUrl } : {}),
     ...(body.badgeTags ? { badgeTags: body.badgeTags } : {}),
     ...(body.sortOrder !== undefined ? { sortOrder: body.sortOrder } : {}),
+    ...(body.enabled !== undefined ? { enabled: body.enabled ? 1 : 0 } : {}),
+    ...(body.listed !== undefined ? { listed: body.listed ? 1 : 0 } : {}),
     ...(body.customCss !== undefined ? { customCss: body.customCss } : {}),
     ...(body.customJs !== undefined ? { customJs: body.customJs } : {}),
     updatedAt: now,
@@ -266,6 +270,16 @@ apiRoutes.put('/admin/plugins/:id/toggle', async (c) => {
   return c.json({ ok: true, enabled: next });
 });
 
+apiRoutes.put('/admin/plugins/:id/listed-toggle', async (c) => {
+  const db = c.get('db');
+  const id = Number(c.req.param('id'));
+  const plugin = await db.select({ listed: plugins.listed }).from(plugins).where(eq(plugins.id, id)).get();
+  if (!plugin) return c.json({ ok: false }, 404);
+  const next = plugin.listed ? 0 : 1;
+  await db.update(plugins).set({ listed: next, updatedAt: new Date().toISOString() }).where(eq(plugins.id, id)).run();
+  return c.json({ ok: true, listed: next });
+});
+
 apiRoutes.delete('/admin/plugins/:id', async (c) => {
   const db = c.get('db');
   const id = Number(c.req.param('id'));
@@ -274,6 +288,17 @@ apiRoutes.delete('/admin/plugins/:id', async (c) => {
 });
 
 // ─── Sections CRUD ───
+apiRoutes.get('/admin/plugins/:id/sections', async (c) => {
+  const db = c.get('db');
+  const pluginId = Number(c.req.param('id'));
+  const rows = await db.select()
+    .from(sections)
+    .where(eq(sections.pluginId, pluginId))
+    .orderBy(asc(sections.sortOrder), asc(sections.id))
+    .all();
+  return c.json(rows);
+});
+
 apiRoutes.post('/admin/sections', async (c) => {
   const db = c.get('db');
   const body = await c.req.json<{ pluginId: number; parentId?: number | null; titleEn?: string; titleZh?: string; slug: string; sortOrder?: number }>();

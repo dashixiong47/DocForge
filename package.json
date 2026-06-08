@@ -8,6 +8,7 @@
     "secrets:push": "node tools/push-dev-vars-secrets.mjs",
     "plugins:sync": "node tools/sync-official-plugins.mjs --local",
     "plugins:sync:remote": "node tools/sync-official-plugins.mjs --remote",
+    "docs:seed:docforge": "node tools/seed-docforge-doc.mjs",
     "db:init": "node tools/migrate-d1.mjs --local && npm run plugins:sync",
     "db:migrate:remote": "node tools/migrate-d1.mjs --remote && npm run plugins:sync:remote",
     "deploy:local": "npm run secrets:push && npm run db:migrate:remote && wrangler deploy",
