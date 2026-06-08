@@ -9,12 +9,31 @@ export const settings = (s: Record<string,string>) => adminLayout({
 .ace_editor{font-family:"Cascadia Code","Consolas",monospace!important}
 .css-save-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--surface);border-top:1px solid var(--border)}
 .css-save-bar span{font-size:12px;color:var(--muted)}
-.site-icon-row{display:flex;align-items:center;gap:10px}
-.site-icon-preview{width:38px;height:38px;border:1px solid var(--border);border-radius:9px;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:800;color:var(--accent);flex-shrink:0}
-.site-icon-preview img{width:100%;height:100%;object-fit:cover}
+.site-icon-card{width:68px;height:68px;border:1px solid var(--border);border-radius:10px;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:800;color:var(--accent);cursor:pointer;transition:.14s;position:relative}
+.site-icon-card:hover{border-color:var(--accent);background:rgba(88,166,255,.06)}
+.site-icon-card img{width:100%;height:100%;object-fit:cover}
+.site-icon-card span{font-size:18px;line-height:1}
+.icon-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px;max-height:340px;overflow:auto;padding:2px}
+.icon-pick-card{height:110px;border:1px solid var(--border);border-radius:8px;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;cursor:pointer;transition:.14s;color:var(--muted);overflow:hidden}
+.icon-pick-card:hover,.icon-pick-card.selected{border-color:var(--accent);background:rgba(88,166,255,.06);color:var(--text)}
+.icon-pick-card.upload{border-style:dashed}
+.icon-pick-card.drag{border-color:var(--ok);background:rgba(63,185,80,.08)}
+.icon-pick-card img{width:100%;height:78px;object-fit:cover;background:#0d1117}
+.icon-pick-name{max-width:100%;padding:0 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>`,
   body:`<h1 class="page-title" data-i18n="settings.title">⚙️ 系统设置</h1>
-<div class="card"><h3 data-i18n="settings.site">站点设置</h3><form id="sf2"><div class="form-row"><div class="form-group"><label data-i18n="settings.siteTitle">站点标题</label><input name="site_title" value="${esc(s.site_title||'DocForge')}" placeholder="DocForge"/></div><div class="form-group"><label data-i18n="settings.subtitle">副标题</label><input name="site_subtitle" value="${esc(s.site_subtitle||'Open documentation platform for projects and plugins.')}" placeholder="Open documentation platform for projects and plugins."/></div></div><div class="form-row"><div class="form-group"><label data-i18n="settings.logoText">顶部 Logo 文字</label><input name="header_logo_text" value="${esc(s.header_logo_text||'DocForge')}" placeholder="DocForge"/></div><div class="form-group"><label data-i18n="settings.siteIcon">站点图标</label><div class="site-icon-row"><div class="site-icon-preview" id="site-icon-preview"></div><input name="site_icon" id="site-icon-input" value="${esc(s.site_icon||'DF')}" placeholder="DF / 🧭 / https://.../icon.png" oninput="renderSiteIcon(this.value)"/></div><div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings.siteIconHint">支持 Emoji、短文本或图片 URL，前台会用作 favicon</div></div><div class="form-group"><label data-i18n="settings.themeColor">主题色</label><input name="header_accent_color" type="color" value="${esc(s.header_accent_color||'#58a6ff')}" style="height:36px;width:80px"/></div></div><div class="form-group"><label data-i18n="settings.footer">页脚文字</label><input name="footer_text" value="${esc(s.footer_text||'')}"/></div><div class="form-group"><label data-i18n="settings.ga">Google Analytics ID</label><input name="ga_tracking_id" value="${esc(s.ga_tracking_id||'')}" placeholder="G-XXXXXXXXXX"/></div><button type="submit" class="btn btn-primary btn-sm" data-i18n="settings.save" style="margin-top:4px">保存</button></form></div>
+<div class="card"><h3 data-i18n="settings.site">站点设置</h3><form id="sf2"><div class="form-row"><div class="form-group"><label data-i18n="settings.siteTitle">站点标题</label><input name="site_title" value="${esc(s.site_title||'DocForge')}" placeholder="DocForge"/></div><div class="form-group"><label data-i18n="settings.subtitle">副标题</label><input name="site_subtitle" value="${esc(s.site_subtitle||'Open documentation platform for projects and plugins.')}" placeholder="Open documentation platform for projects and plugins."/></div></div><div class="form-row"><div class="form-group"><label data-i18n="settings.logoText">顶部 Logo 文字</label><input name="header_logo_text" value="${esc(s.header_logo_text||'DocForge')}" placeholder="DocForge"/></div><div class="form-group"><label data-i18n="settings.siteIcon">站点图标</label><input name="site_icon" id="site-icon-input" type="hidden" value="${esc(s.site_icon||'DF')}"/><div class="site-icon-card" id="site-icon-preview" onclick="openIconPicker()" title="选择图标"></div><div style="font-size:11px;color:var(--muted);margin-top:6px" data-i18n="settings.siteIconHint">点击卡片更换，支持上传图片、媒体 URL、Emoji 或短文本</div></div><div class="form-group"><label data-i18n="settings.themeColor">主题色</label><input name="header_accent_color" type="color" value="${esc(s.header_accent_color||'#58a6ff')}" style="height:36px;width:80px"/></div></div><div class="form-group"><label data-i18n="settings.footer">页脚文字</label><input name="footer_text" value="${esc(s.footer_text||'')}"/></div><div class="form-group"><label data-i18n="settings.ga">Google Analytics ID</label><input name="ga_tracking_id" value="${esc(s.ga_tracking_id||'')}" placeholder="G-XXXXXXXXXX"/></div><button type="submit" class="btn btn-primary btn-sm" data-i18n="settings.save" style="margin-top:4px">保存</button></form></div>
+
+<div class="modal-ov" id="icon-picker-modal" style="z-index:3000">
+  <div class="modal" onclick="event.stopPropagation()" style="width:680px;max-width:calc(100vw - 32px)">
+    <div class="modal-hd"><h3 data-i18n="settings.selectIcon">选择图标</h3><button class="modal-close" onclick="closeModal('icon-picker-modal')" title="关闭">✕</button></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px"><input id="icon-url-input" placeholder="DF / 🧭 / https://... / /media/..." style="flex:1" oninput="selectSiteIcon(this.value)"><input id="icon-search" data-i18n-placeholder="docs.searchMedia" placeholder="搜索文件名..." style="flex:1" oninput="loadIconMedia()"></div>
+    <input id="icon-file-input" type="file" accept="image/*" multiple style="display:none">
+    <div id="icon-grid" class="icon-picker-grid"></div>
+    <div id="icon-picker-status" style="min-height:18px;margin-top:8px;font-size:12px;color:var(--muted)"></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('icon-picker-modal')" data-i18n="docs.cancel">取消</button><button class="btn btn-primary" onclick="confirmSiteIcon()" data-i18n="docs.confirm">确认</button></div>
+  </div>
+</div>
 
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -35,10 +54,52 @@ function renderSiteIcon(v){
   var box=document.getElementById('site-icon-preview');
   v=String(v||'').trim()||'DF';
   if(/^https?:\\/\\//i.test(v)||/^\\//.test(v)){
-    box.innerHTML='<img src="'+v.replace(/"/g,'&quot;')+'" onerror="this.parentNode.textContent=\\'DF\\'">';
+    box.innerHTML='<img src="'+v.replace(/"/g,'&quot;')+'" onerror="this.parentNode.innerHTML=\\'<span>DF</span>\\'">';
   }else{
-    box.textContent=v.slice(0,4);
+    box.innerHTML='<span>'+escHtml(v.slice(0,4))+'</span>';
   }
+}
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+var _pickedIcon=document.getElementById('site-icon-input').value||'DF';
+function openIconPicker(){_pickedIcon=document.getElementById('site-icon-input').value||'DF';document.getElementById('icon-url-input').value=_pickedIcon;openModal('icon-picker-modal');loadIconMedia();}
+function selectSiteIcon(v){_pickedIcon=String(v||'').trim();renderIconGridSelection();}
+function confirmSiteIcon(){var v=_pickedIcon||document.getElementById('icon-url-input').value.trim()||'DF';document.getElementById('site-icon-input').value=v;renderSiteIcon(v);closeModal('icon-picker-modal');}
+async function loadIconMedia(){
+  var q=(document.getElementById('icon-search').value||'').toLowerCase();
+  var g=document.getElementById('icon-grid');
+  var uploadCard='<div class="icon-pick-card upload" id="icon-upload-card"><div style="font-size:26px;color:var(--accent)">+</div><div class="icon-pick-name" data-i18n="media.dropUpload">拖拽文件到此处，或点击上传</div></div>';
+  try{
+    var r=await fetch('/api/admin/media?pluginSlug=docforge&page=1&limit=48');
+    var d=await r.json();
+    var items=(d.items||[]).filter(function(m){return /^image\\//.test(m.mimeType||'')&&(!q||m.filename.toLowerCase().indexOf(q)!==-1);});
+    g.innerHTML=uploadCard+items.map(function(m){var url='/media/'+m.d2Key;return '<div class="icon-pick-card" data-url="'+escHtml(url)+'" onclick="selectIconCard(\\''+escHtml(url)+'\\')"><img src="'+escHtml(url)+'" loading="lazy"><div class="icon-pick-name">'+escHtml(m.filename)+'</div></div>';}).join('');
+    bindIconUpload();
+    renderIconGridSelection();
+    if(window.applyAdminI18n)window.applyAdminI18n();
+  }catch(e){g.innerHTML=uploadCard;bindIconUpload();document.getElementById('icon-picker-status').textContent=e.message||String(e);}
+}
+function renderIconGridSelection(){document.querySelectorAll('.icon-pick-card[data-url]').forEach(function(c){c.classList.toggle('selected',c.dataset.url===_pickedIcon);});document.getElementById('icon-url-input').value=_pickedIcon||'';}
+function selectIconCard(url){_pickedIcon=url;renderIconGridSelection();}
+function bindIconUpload(){
+  var card=document.getElementById('icon-upload-card'),input=document.getElementById('icon-file-input');
+  if(!card||!input)return;
+  card.onclick=function(){input.click();};
+  card.ondragover=function(e){e.preventDefault();card.classList.add('drag');};
+  card.ondragleave=function(){card.classList.remove('drag');};
+  card.ondrop=function(e){e.preventDefault();card.classList.remove('drag');uploadIconFiles(e.dataTransfer.files);};
+  input.onchange=function(){uploadIconFiles(input.files);input.value='';};
+}
+async function uploadIconFiles(files){
+  if(!files||!files.length)return;
+  var st=document.getElementById('icon-picker-status');
+  for(var i=0;i<files.length;i++){
+    var fd=new FormData();fd.append('file',files[i]);
+    st.textContent=(window.t?window.t('media.uploading'):'上传中')+' '+files[i].name;
+    var r=await fetch('/media/upload/docforge',{method:'PUT',body:fd});
+    var d=await r.json();
+    if(d.ok&&d.url){_pickedIcon=d.url;st.textContent='✓ '+d.url;}else{st.textContent=d.error||'upload failed';}
+  }
+  await loadIconMedia();
 }
 renderSiteIcon(document.getElementById('site-icon-input').value);
 var _ACE_BASE='https://cdn.bootcdn.net/ajax/libs/ace/1.32.6';
