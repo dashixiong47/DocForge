@@ -28,7 +28,7 @@ if (!migrationFiles.length) {
 function runWrangler(args) {
   const result = spawnSync(process.execPath, [wranglerBin, ...args], {
     cwd: root,
-    shell: true,
+    shell: false,
     stdio: 'inherit',
   });
   if (result.status !== 0) process.exit(result.status ?? 1);
