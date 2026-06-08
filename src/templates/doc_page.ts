@@ -26,9 +26,12 @@ out=out.replace(/\{\{media:([^}]+)\}\}/g,function(m,n){var key=String(n).trim();
 out=out.replace(/\{\{attr:([^}]+)\}\}/g,function(m,n){return escAttr(readAttr(el,n));});
 return out;
 }
+function hasRenderTag(tag){
+return Object.keys(R).some(function(id){var p=R[id];return !!(p&&p.renderTags&&p.renderTags[tag]);});
+}
 function runTemplates(){
 Object.keys(_templates).forEach(function(id){var map=_templates[id]||{};
-Object.keys(map).forEach(function(tag){Array.from(document.querySelectorAll(tag)).forEach(function(el){
+Object.keys(map).forEach(function(tag){if(hasRenderTag(tag))return;Array.from(document.querySelectorAll(tag)).forEach(function(el){
 try{var tmp=document.createElement('div');tmp.innerHTML=renderTemplate(map[tag],el);
 var nodes=Array.from(tmp.childNodes);
 if(nodes.length===1&&nodes[0].nodeType===1)el.parentNode.replaceChild(nodes[0],el);
