@@ -1,5 +1,11 @@
 import { adminLayout, esc } from './layout';
 
+function docListIcon(p: any): string {
+  const fallback = esc(String(p.name || p.slug || '?').trim().slice(0, 1).toUpperCase() || '?');
+  if (!p.iconUrl) return `<div class="doc-list-icon"><span>${fallback}</span></div>`;
+  return `<div class="doc-list-icon"><img src="${esc(p.iconUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none">${fallback}</span></div>`;
+}
+
 export const plugins = (all: any[]) => adminLayout({
   title:'文档管理',active:'plugins',
   body:`<h1 class="page-title" data-i18n="docs.title">📁 文档管理</h1>
@@ -16,6 +22,7 @@ export const plugins = (all: any[]) => adminLayout({
   ${all.map((p:any)=>`<div class="card doc-card" data-id="${p.id}" draggable="true">
     <div class="doc-head">
       <span class="drag-handle" data-i18n-title="docs.dragSort" title="拖动排序">⠿</span>
+      ${docListIcon(p)}
       <div class="doc-meta">
         <div class="doc-title">
           <strong>${esc(p.name)}</strong>

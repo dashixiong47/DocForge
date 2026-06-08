@@ -80,6 +80,9 @@ a{color:var(--accent);text-decoration:none}
 .doc-card.dragging{opacity:.35}
 .doc-card.drag-over{border-color:var(--accent)!important;background:rgba(88,166,255,.05)}
 .doc-head{display:flex;align-items:flex-start;gap:10px}
+.doc-list-icon{width:38px;height:38px;border-radius:9px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;color:var(--accent);font-weight:800;box-shadow:inset 0 0 0 1px rgba(88,166,255,.04)}
+.doc-list-icon img{width:100%;height:100%;object-fit:cover;display:block}
+.doc-list-icon span{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1}
 .doc-meta{flex:1;min-width:0}
 .doc-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px}
 .doc-title strong{font-size:14px}
