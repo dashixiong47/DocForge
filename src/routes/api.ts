@@ -238,7 +238,7 @@ apiRoutes.post('/admin/plugins', async (c) => {
 apiRoutes.put('/admin/plugins/:id', async (c) => {
   const db = c.get('db');
   const id = Number(c.req.param('id'));
-  const body = await c.req.json<{ slug?: string; name?: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; customCss?: string }>();
+  const body = await c.req.json<{ slug?: string; name?: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; customCss?: string; customJs?: string }>();
   const now = new Date().toISOString();
   await db.update(plugins).set({
     ...(body.slug ? { slug: body.slug } : {}),
@@ -250,7 +250,7 @@ apiRoutes.put('/admin/plugins/:id', async (c) => {
     ...(body.badgeTags ? { badgeTags: body.badgeTags } : {}),
     ...(body.sortOrder !== undefined ? { sortOrder: body.sortOrder } : {}),
     ...(body.customCss !== undefined ? { customCss: body.customCss } : {}),
-    ...(('customJs' in body && body.customJs !== undefined) ? { customJs: (body as any).customJs } : {}),
+    ...(body.customJs !== undefined ? { customJs: body.customJs } : {}),
     updatedAt: now,
   }).where(eq(plugins.id, id)).run();
   return c.json({ ok: true });
@@ -946,6 +946,7 @@ apiRoutes.post('/admin/extensions/:id/update-from-url', async (c) => {
     icon: m.icon ?? '🧩',
     homepage: m.homepage ?? '',
     extType: m.extType ?? 'widget',
+    html: m.html ?? '',
     css: m.css ?? '',
     js: m.js ?? '',
     headHtml: m.headHtml ?? '',
@@ -980,6 +981,7 @@ apiRoutes.post('/admin/extensions', async (c) => {
     homepage:     m.homepage     ?? '',
     extType:      m.extType      ?? 'widget',
     enabled:      1,
+    html:         m.html         ?? '',
     css:          m.css          ?? '',
     js:           m.js           ?? '',
     headHtml:     m.headHtml     ?? '',
@@ -1014,7 +1016,7 @@ apiRoutes.put('/admin/extensions/:id', async (c) => {
   const body = await c.req.json<{
     name?: string; description?: string; version?: string; author?: string;
     icon?: string; homepage?: string; extType?: string;
-    css?: string; js?: string; headHtml?: string;
+    html?: string; css?: string; js?: string; headHtml?: string;
     blockTypes?: string[]; tags?: string[];
     i18n?: Record<string, Record<string, string>>;
     configSchema?: object; config?: object;
@@ -1030,6 +1032,7 @@ apiRoutes.put('/admin/extensions/:id', async (c) => {
     ...(body.icon        !== undefined ? { icon:         body.icon }                       : {}),
     ...(body.homepage    !== undefined ? { homepage:     body.homepage }                   : {}),
     ...(body.extType     !== undefined ? { extType:      body.extType }                    : {}),
+    ...(body.html        !== undefined ? { html:         body.html }                       : {}),
     ...(body.css         !== undefined ? { css:          body.css }                        : {}),
     ...(body.js          !== undefined ? { js:           body.js }                         : {}),
     ...(body.headHtml    !== undefined ? { headHtml:     body.headHtml }                   : {}),

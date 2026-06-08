@@ -6,12 +6,25 @@ import { adminRoutes } from './routes/admin';
 import { docsRoutes } from './routes/docs';
 import { apiRoutes } from './routes/api';
 import { mediaRoutes } from './routes/media';
+import { DOCFORGE_ICON_SVG } from './assets';
 import type { AppType } from './types';
 
 const app = new Hono<AppType>();
 
 app.use('*', cors());
 app.use('*', logger());
+
+app.get('/favicon.svg', async (c) => {
+  const asset = await c.env.ASSETS?.fetch(new URL('/favicon.svg', c.req.url));
+  if (asset?.ok) return asset;
+  return c.body(DOCFORGE_ICON_SVG, 200, {
+    'Content-Type': 'image/svg+xml; charset=utf-8',
+    'Cache-Control': 'public, max-age=31536000, immutable',
+  });
+});
+
+app.get('/favicon.png', (c) => c.env.ASSETS.fetch(new URL('/favicon.png', c.req.url)));
+app.get('/favicon.ico', (c) => c.env.ASSETS.fetch(new URL('/favicon.ico', c.req.url)));
 
 app.use('*', async (c, next) => {
   const db = createDB(c.env.DB);

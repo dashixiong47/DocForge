@@ -9,6 +9,7 @@ var _lang=(document.cookie.match(/(?:^|;\\s*)lang=([^;]+)/)||[])[1]||document.do
 var _i18n={};
 var _media={};
 var _docTrans={};
+var _templates={};
 var R={};
 function createT(id){return function(key){var m=_i18n[id];return m&&m[key]?(m[key][_lang]||m[key].zh||key):key;};}
 function getMedia(key){return _media[key]||'';}
@@ -16,8 +17,29 @@ function getMedia(key){return _media[key]||'';}
 // Use this in extension JS for document-specific strings (NOT extension UI strings).
 // Extension UI strings → t('key');  Document content → DocForge.docT('key')
 function docT(key){return _docTrans[key]||key;}
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function readAttr(el,names){var list=String(names||'').split(/[|,]/).map(function(n){return n.trim();}).filter(Boolean);for(var i=0;i<list.length;i++){var v=el.getAttribute(list[i]);if(v)return v;}return '';}
+function renderTemplate(tpl,el){
+var out=tpl.replace(/\{\{slot\}\}/g,el.innerHTML);
+out=out.replace(/\{\{media:attr:([^}]+)\}\}/g,function(m,n){var key=readAttr(el,n);return escAttr(getMedia(key)||key);});
+out=out.replace(/\{\{media:([^}]+)\}\}/g,function(m,n){var key=String(n).trim();return escAttr(getMedia(key)||key);});
+out=out.replace(/\{\{attr:([^}]+)\}\}/g,function(m,n){return escAttr(readAttr(el,n));});
+return out;
+}
+function runTemplates(){
+Object.keys(_templates).forEach(function(id){var map=_templates[id]||{};
+Object.keys(map).forEach(function(tag){Array.from(document.querySelectorAll(tag)).forEach(function(el){
+try{var tmp=document.createElement('div');tmp.innerHTML=renderTemplate(map[tag],el);
+var nodes=Array.from(tmp.childNodes);
+if(nodes.length===1&&nodes[0].nodeType===1)el.parentNode.replaceChild(nodes[0],el);
+else{var frag=document.createDocumentFragment();nodes.forEach(function(n){frag.appendChild(n);});el.parentNode.replaceChild(frag,el);}
+}catch(e){console.error('[DocForge] template['+tag+'] error:',e);}
+});});});
+}
 function run(){
-// 1. renderTags: replace custom HTML tags registered by extensions
+// 1. HTML templates: replace custom tags declared by optional extension HTML templates
+runTemplates();
+// 2. renderTags: replace custom HTML tags registered by extensions
 Object.keys(R).forEach(function(id){var p=R[id];
 if(!p.renderTags)return;
 var t=createT(id);
@@ -28,7 +50,7 @@ try{var tmp=document.createElement('div');tmp.innerHTML=fn(el,_lang,t,idx);
 var node=tmp.firstElementChild;if(node)el.parentNode.replaceChild(node,el);
 }catch(e){console.error('[DocForge] renderTags['+tag+'] error:',e);}
 });});});
-// 2. renderBlock: replace .ext-block placeholders (legacy JSON blocks)
+// 3. renderBlock: replace .ext-block placeholders (legacy JSON blocks)
 Object.keys(R).forEach(function(id){var p=R[id];
 if(p.renderBlock){Object.keys(p.renderBlock).forEach(function(type){var fn=p.renderBlock[type];
 document.querySelectorAll('.ext-block[data-type="'+type+'"]').forEach(function(el){
@@ -39,13 +61,13 @@ try{el.innerHTML=fn(d,lang);}catch(e){console.error('[DocForge] renderBlock['+ty
 if(p.onLoad){try{p.onLoad();}catch(e){console.error('[DocForge] '+id+' onLoad error:',e);}}
 });}
 function getTagSchemas(){var s={};Object.keys(R).forEach(function(id){var p=R[id];if(p.tagSchema)Object.assign(s,p.tagSchema);});return s;}
-return{_i18n:_i18n,_media:_media,_docTrans:_docTrans,register:function(opts){if(opts&&opts.id)R[opts.id]=opts;},createT:createT,t:function(id,key){return createT(id)(key);},media:getMedia,docT:docT,_run:run,getTagSchemas:getTagSchemas};
+return{_i18n:_i18n,_media:_media,_docTrans:_docTrans,_templates:_templates,register:function(opts){if(opts&&opts.id)R[opts.id]=opts;},createT:createT,t:function(id,key){return createT(id)(key);},media:getMedia,docT:docT,_run:run,getTagSchemas:getTagSchemas};
 })();document.addEventListener('DOMContentLoaded',function(){window.DocForge._run();});`;
 
 interface Plugin {
   id: number; slug: string; name: string; version: string;
   compatibility: string; description: string | null; iconUrl: string | null;
-  badgeTags: string | null; sortOrder: number; customCss?: string | null;
+  badgeTags: string | null; sortOrder: number; customCss?: string | null; customJs?: string | null;
 }
 
 interface Section {
@@ -220,7 +242,7 @@ function mediaUrl(mediaMap: MediaMap, key: string, kind: 'img' | 'video', fallba
 
 function faviconLink(icon: string): string {
   const raw = (icon || '').trim();
-  if (!raw) return '';
+  if (!raw) return '<link rel="icon" href="/favicon.ico" sizes="any">\n<link rel="icon" type="image/png" href="/favicon.png">\n<link rel="icon" type="image/svg+xml" href="/favicon.svg">';
   if (/^https?:\/\//i.test(raw) || raw.startsWith('/')) {
     return `<link rel="icon" href="${esc(raw)}">`;
   }
@@ -258,9 +280,10 @@ export function docLayout(params: {
   extScriptsHtml?: string;
   extI18nHtml?: string;
   extMediaHtml?: string;
+  extTemplatesHtml?: string;
   extDocTransHtml?: string;
 }): string {
-  const { plugin, sections, blocksBySection, settings, lang, translations, mediaMap = new Map(), availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extDocTransHtml = '' } = params;
+  const { plugin, sections, blocksBySection, settings, lang, translations, mediaMap = new Map(), availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '', extDocTransHtml = '' } = params;
   const badgeTags = JSON.parse(plugin.badgeTags || '[]') as string[];
   const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
 
@@ -287,9 +310,10 @@ ${docThemeCSS()}
 ${settings.custom_css ? `<style>${settings.custom_css}</style>` : ''}
 ${extHeadHtml}
 ${plugin.customCss ? `<style>/* doc: ${esc(plugin.slug)} */\n${plugin.customCss}</style>` : ''}
-${extHeadHtml || extScriptsHtml ? `<script>${DOCFORGE_RUNTIME}</script>` : ''}
+${extHeadHtml || extScriptsHtml || extTemplatesHtml ? `<script>${DOCFORGE_RUNTIME}</script>` : ''}
 ${extI18nHtml}
 ${extMediaHtml}
+${extTemplatesHtml}
 ${extDocTransHtml}
 <style>
 .doc-lp{position:relative;display:inline-block}
@@ -373,6 +397,8 @@ ${extDocTransHtml}
     var sectionEls = tocLinks.map(function(l) {
       return document.getElementById(l.getAttribute('href').slice(1));
     }).filter(Boolean);
+    var tocLockUntil = 0;
+    var tocLockTarget = '';
 
     function setActiveToc(id) {
       tocLinks.forEach(function(l) {
@@ -386,12 +412,23 @@ ${extDocTransHtml}
         if (!target) return;
         e.preventDefault();
         setActiveToc(target.id);
+        tocLockTarget = target.id;
+        tocLockUntil = Date.now() + 1800;
         target.scrollIntoView({ behavior: 'smooth', block: 'start' });
         history.replaceState(null, '', '#' + target.id);
       });
     });
 
     function onScroll() {
+      if (tocLockTarget && Date.now() < tocLockUntil) {
+        var lockedEl = document.getElementById(tocLockTarget);
+        if (lockedEl && Math.abs(lockedEl.getBoundingClientRect().top) > 6) {
+          setActiveToc(tocLockTarget);
+          return;
+        }
+        tocLockTarget = '';
+        tocLockUntil = 0;
+      }
       var marker = window.scrollY + Math.min(100, window.innerHeight * 0.15);
       var best = sectionEls[0];
       for (var i = 0; i < sectionEls.length; i++) {
@@ -407,7 +444,16 @@ ${extDocTransHtml}
     if (initHash) {
       setActiveToc(initHash);
       var initEl = document.getElementById(initHash);
-      if (initEl) setTimeout(function() { initEl.scrollIntoView({ block: 'start' }); }, 0);
+      if (initEl) {
+        tocLockTarget = initHash;
+        tocLockUntil = Date.now() + 1800;
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+        setTimeout(function() {
+          initEl.scrollIntoView({ block: 'start' });
+          setActiveToc(initHash);
+          setTimeout(function() { tocLockTarget = ''; tocLockUntil = 0; setActiveToc(initHash); }, 250);
+        }, 0);
+      }
     } else {
       onScroll();
     }
@@ -461,6 +507,7 @@ ${sections.length > 0
 <footer style="text-align:center;padding:40px 24px;color:var(--c-muted);font-size:13px;border-top:1px solid var(--c-border);margin-top:24px">
   ${settings.footer_text ? settings.footer_text : `&copy; ${new Date().getFullYear()} ${esc(plugin.name)} Documentation`}
 </footer>
+${plugin.customJs ? `<script>/* doc: ${esc(plugin.slug)} */\n${plugin.customJs}\n</script>` : ''}
 ${extScriptsHtml}
 </body></html>`;
 }
@@ -638,18 +685,23 @@ export function home(params: {
   extScriptsHtml?: string;
   extI18nHtml?: string;
   extMediaHtml?: string;
+  extTemplatesHtml?: string;
 }): string {
-  const { plugins: pluginList, settings, lang, availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '' } = params;
+  const { plugins: pluginList, settings, lang, availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '' } = params;
   const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
   return `<!doctype html><html lang="${htmlLang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(settings.site_title || 'DocForge')}</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
 ${settings.custom_css ? `<style>${settings.custom_css}</style>` : docThemeCSS()}
 ${extHeadHtml}
-${extHeadHtml || extScriptsHtml ? `<script>${DOCFORGE_RUNTIME}</script>` : ''}
+${extHeadHtml || extScriptsHtml || extTemplatesHtml ? `<script>${DOCFORGE_RUNTIME}</script>` : ''}
 ${extI18nHtml}
 ${extMediaHtml}
+${extTemplatesHtml}
 <style>
 .home-hero{text-align:center;padding:80px 24px 48px}
 .home-hero h1{font-size:clamp(36px,5vw,56px);margin-bottom:12px}

@@ -1,6 +1,6 @@
 # DocForge
 
-Lightweight documentation CMS with admin editing, published docs, media placeholders, i18n translations, extension sharing, and visit analytics. Built on Cloudflare Workers, D1, and R2.
+Lightweight documentation CMS with admin editing, published docs, media placeholders, i18n translations, plugin sharing, and visit analytics. Built on Cloudflare Workers, D1, and R2.
 
 [中文文档](./README.zh-CN.md)
 
@@ -9,9 +9,9 @@ Lightweight documentation CMS with admin editing, published docs, media placehol
 ## Features
 
 - **Editor-first workflow**: manage docs, sections, HTML/CSS/JS, translations, and media from one admin UI.
-- **Multilingual by design**: document content, system UI, and extension strings share the same translation workflow.
+- **Multilingual by design**: document content, system UI, and plugin strings share the same translation workflow.
 - **Media-friendly docs**: media keys resolve to normal URLs, so authors can use plain `<img>` / `<video>` tags or richer media components.
-- **Extensible runtime**: plugins can add custom tags, CSS, JS, Head HTML, and reusable documentation widgets.
+- **Extensible runtime**: plugins can add optional HTML templates, custom tags, CSS, JS, and reusable documentation widgets.
 - **Cloudflare-native deployment**: runs on Workers with D1 for data and R2 for media, without a separate server to maintain.
 
 ---
@@ -119,7 +119,7 @@ Ignored local files and folders:
 - `.env`
 - `.env.local`
 - `.wrangler/`
-- `local-extensions/`
+- `PrivatePlugins/`
 - `scripts/`
 
 ---
@@ -127,11 +127,11 @@ Ignored local files and folders:
 ## Architecture
 
 - **Cloudflare Worker**: Hono application entry for admin pages, public docs, API routes, and media access.
-- **D1**: stores docs, sections, content blocks, translations, extensions, settings, admins, and analytics.
+- **D1**: stores docs, sections, content blocks, translations, plugins, settings, admins, and analytics.
 - **R2**: stores uploaded images, videos, GIFs, WebP files, and other media.
 - **SSR Templates**: admin and public pages are rendered from TypeScript templates.
-- **Extension Runtime**: extensions can inject CSS, JS, Head HTML, and custom renderers.
-- **i18n System**: system UI, document content, and extension strings are stored in translations and can use batch or AI translation.
+- **Plugin Runtime**: plugins can provide optional HTML templates, CSS, JS, custom tags, and custom renderers.
+- **i18n System**: system UI, document content, and plugin strings are stored in translations and can use batch or AI translation.
 
 ---
 
@@ -144,7 +144,7 @@ Ignored local files and folders:
 <video src="{{video:demo-clip}}" controls></video>
 ```
 
-For richer presentation, enable the built-in `Media Viewer` extension and use component tags:
+For richer presentation, install a media plugin and use component tags:
 
 ```html
 <media-image key="hero-screenshot" fit="cover" caption="Main UI" lightbox="true"></media-image>
@@ -156,26 +156,36 @@ The component layer is optional; plain `<img>` and `<video>` remain supported.
 
 ---
 
-## Extension Usage
+## Plugin Usage
 
-Extensions are runtime add-ons stored in the `extensions` table. They can provide CSS, JS, Head HTML, custom tags, config, and their own i18n strings.
+Plugins are runtime add-ons stored in the `extensions` table. They can provide optional HTML templates, CSS, JS, custom tags, config, and their own i18n strings.
 
-Install or create extensions from `/admin/extensions`:
+Install or create plugins from `/admin/extensions`:
 
 1. Upload a manifest JSON file, load a manifest URL, or start from a built-in template.
-2. Edit CSS, JS, Head HTML, custom tags, config, and translation strings.
-3. Enable the extension when it is ready.
+2. Edit HTML templates, CSS, JS, custom tags, config, and translation strings.
+3. Enable the plugin when it is ready.
 
-Minimal widget extension JS:
+Minimal widget extension HTML:
+
+```html
+<template data-tag="callout-box">
+  <aside class="callout-box" data-title="{{attr:title}}">
+    <strong>{{attr:title}}</strong>
+    <div class="callout-body">{{slot}}</div>
+  </aside>
+</template>
+```
+
+Optional widget extension JS:
 
 ```js
 DocForge.register({
   id: 'callout-box',
-  renderTags: {
-    'callout-box': (el) => {
-      const title = el.getAttribute('title') || '';
-      return `<aside class="callout-box"><strong>${title}</strong>${el.innerHTML}</aside>`;
-    },
+  onLoad() {
+    document.querySelectorAll('.callout-box').forEach((el) => {
+      el.classList.add('is-ready');
+    });
   },
 });
 ```
@@ -190,18 +200,24 @@ Usage in a document:
 
 Runtime content can still use normal placeholders such as `{{t:key}}`, `{{img:key}}`, and `{{video:key}}`. Plain HTML remains valid even when a component extension is not enabled.
 
-Extension cards include two export actions:
+HTML templates are optional. A plugin can be CSS-only, JS-only, or use HTML + CSS + JS together. Template placeholders:
+
+- `{{slot}}`: original inner HTML of the custom tag.
+- `{{attr:name}}`: an attribute from the custom tag.
+
+Plugin cards include two export actions:
 
 - **Share** copies an install URL for deployments where the manifest endpoint is public.
 - **Download** exports the current manifest JSON so you can keep private plugins outside this repository.
 
-For private or client-specific plugins, keep local copies under `local-extensions/`:
+Project-provided plugins that are safe to publish can live in `Plugins/`. Private or client-specific plugins should stay under `PrivatePlugins/`:
 
 ```bash
-mkdir local-extensions
+mkdir Plugins
+mkdir PrivatePlugins
 ```
 
-`local-extensions/` is ignored by git by default. Use it for local manifest backups or private plugin work that should not be published with the open-source project.
+`Plugins/` is committed. `PrivatePlugins/` is ignored by git by default. Use `PrivatePlugins/` for local manifest backups or private plugin work that should not be published with the open-source project.
 
 ---
 
@@ -213,13 +229,14 @@ mkdir local-extensions
 │   ├── db/                  # Drizzle schema and DB bootstrap
 │   ├── routes/              # Hono routes: admin, api, docs, media
 │   ├── services/            # auth, settings, i18n, extensions
-│   ├── templates/           # admin, public, and extension templates
+│   ├── templates/           # admin, public, and plugin templates
 │   ├── index.ts             # Worker entry
 │   └── types.ts             # App types
 ├── tools/
 │   ├── migrate-d1.mjs       # local/remote D1 migration runner
 │   └── push-dev-vars-secrets.mjs
-├── local-extensions/        # optional private extension manifests, ignored by git
+├── Plugins/                 # publishable project-provided plugin manifests
+├── PrivatePlugins/          # private local plugin manifests, ignored by git
 ├── .dev.vars.example        # committed local variable template
 ├── wrangler.toml            # Cloudflare config and safe defaults
 ├── package.json             # npm scripts
@@ -234,10 +251,10 @@ Core tables:
 
 - `plugins`: published documentation sites. Stores `slug`, `name`, `version`, `compatibility`, description, icon, tags, publish status, custom CSS, and custom JS.
 - `sections`: documentation tree. `parent_id` supports nested sections.
-- `content_blocks`: section content blocks. HTML, code, text, image, video, and extension blocks are stored as JSON.
+- `content_blocks`: section content blocks. HTML, code, text, image, video, and plugin blocks are stored as JSON.
 - `media`: media index. `d2_key` maps to R2 objects, and `placeholder_key` maps to `{{img:key}}` / `{{video:key}}`.
 - `translations`: i18n store keyed by `plugin_id + key + locale`.
-- `extensions`: extension manifests with CSS, JS, Head HTML, tags, config, and i18n.
+- `extensions`: plugin manifests with optional HTML templates, CSS, JS, tags, config, and i18n.
 - `site_settings`: site-level title, footer, custom CSS, and Head HTML.
 - `admins`: admin username and password hash.
 - `analytics_events`: public doc visits with doc, path, IP, country, UA, and timestamp.

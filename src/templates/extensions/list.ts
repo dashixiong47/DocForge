@@ -37,7 +37,7 @@ function extI18n(ext: Extension, key: string, lang: string, fallback: string): s
   return entry[lang] || entry.zh || entry.en || Object.values(entry)[0] || fallback;
 }
 
-// ─── Extensions list page (inside admin layout) ───────────────────────────────
+// ─── Plugins list page (inside admin layout) ──────────────────────────────────
 export function extensionsList(exts: Extension[]): string {
   const allTags = [...new Set(exts.flatMap(e => e.tags))].sort();
 
@@ -51,19 +51,17 @@ export function extensionsList(exts: Extension[]): string {
       slug:'my-widget', name:'My Widget', type:'widget', icon:'🧩', version:'1.0.0', tags:['ui'],
       description:'自定义 HTML 组件',
       blockTypes:['my-block'],
+      html:`<template data-tag="my-tag">
+  <div class="my-block" data-label="{{attr:label}}">
+    <strong>{{attr:label}}</strong>
+    <div class="my-block-body">{{slot}}</div>
+  </div>
+</template>`,
       css:'.my-block { padding: 16px; border-radius: 8px; background: var(--c-surface); }',
       js:`DocForge.register({
   id: "my-widget",
 
-  // 自定义 HTML 标签渲染 — <my-tag attr="val"> → HTML
-  renderTags: {
-    "my-tag": function(el, lang, t) {
-      var label = el.getAttribute("label") || "Hello";
-      return '<div class="my-block">' + label + '</div>';
-    }
-  },
-
-  // 自定义内容块渲染 (ext-block)
+  // 可选：模板替换后继续增强交互
   renderBlock: {
     "my-block": function(data, lang) {
       return '<div class="my-block">' + (data.text || '') + '</div>';
@@ -440,7 +438,7 @@ async function downloadExt(id,slug){
     var blob=new Blob([text],{type:'application/json;charset=utf-8'});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);
-    a.download=(slug||'extension')+'.docforge-extension.json';
+    a.download=(slug||'plugin')+'.docforge-plugin.json';
     document.body.appendChild(a);
     a.click();
     setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},0);

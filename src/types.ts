@@ -3,6 +3,7 @@ import type { createDB } from './db';
 export type Env = {
   DB: D1Database;
   MEDIA: R2Bucket;
+  ASSETS: Fetcher;
   KV: KVNamespace;
   JWT_SECRET: string;
   ADMIN_USERNAME: string;

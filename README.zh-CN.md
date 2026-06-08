@@ -1,6 +1,6 @@
 # DocForge
 
-轻量级文档管理系统：后台编辑、文档发布、媒体占位符、i18n 翻译、扩展分享和访问统计。基于 Cloudflare Workers、D1、R2。
+轻量级文档管理系统：后台编辑、文档发布、媒体占位符、i18n 翻译、插件分享和访问统计。基于 Cloudflare Workers、D1、R2。
 
 [English](./README.md)
 
@@ -9,9 +9,9 @@
 ## 项目优势
 
 - **编辑器优先**：文档、章节、HTML/CSS/JS、翻译和媒体都在同一个后台完成。
-- **多语言内建**：文档内容、系统界面和扩展文案共用同一套翻译流程。
+- **多语言内建**：文档内容、系统界面和插件文案共用同一套翻译流程。
 - **媒体友好**：媒体 key 解析为普通 URL，既能写原生 `<img>` / `<video>`，也能使用更强的媒体组件。
-- **扩展运行时**：插件可增加自定义标签、CSS、JS、Head HTML 和可复用文档组件。
+- **Plugin Runtime**：插件可增加可选 HTML 模板、自定义标签、CSS、JS 和可复用文档组件。
 - **Cloudflare 原生部署**：基于 Workers、D1、R2 运行，不需要维护独立服务端。
 
 ---
@@ -119,7 +119,7 @@ npm run deploy
 - `.env`
 - `.env.local`
 - `.wrangler/`
-- `local-extensions/`
+- `PrivatePlugins/`
 - `scripts/`
 
 ---
@@ -127,11 +127,11 @@ npm run deploy
 ## 项目架构
 
 - **Cloudflare Worker**：Hono 应用入口，负责后台、前台文档、API、媒体访问。
-- **D1**：保存文档、章节、内容块、翻译、扩展、设置、管理员和访问统计。
+- **D1**：保存文档、章节、内容块、翻译、插件、设置、管理员和访问统计。
 - **R2**：保存上传的图片、视频、GIF、WebP 等媒体文件。
 - **SSR Templates**：后台和前台页面由 TypeScript 模板渲染。
-- **Extension Runtime**：扩展可注入 CSS、JS、Head HTML，并提供自定义标签/块渲染能力。
-- **i18n System**：系统文案、文档文案、扩展文案分别进入翻译表，可批量保存和 AI 翻译。
+- **Plugin Runtime**：插件可提供可选 HTML 模板、CSS、JS、自定义标签和块渲染能力。
+- **i18n System**：系统文案、文档文案、插件文案分别进入翻译表，可批量保存和 AI 翻译。
 
 ---
 
@@ -144,7 +144,7 @@ npm run deploy
 <video src="{{video:demo-clip}}" controls></video>
 ```
 
-需要更强的展示能力时，可以启用内置 `Media Viewer` 扩展，使用组件标签：
+需要更强的展示能力时，可以安装媒体插件，使用组件标签：
 
 ```html
 <media-image key="hero-screenshot" fit="cover" caption="Main UI" lightbox="true"></media-image>
@@ -158,24 +158,34 @@ npm run deploy
 
 ## 插件用法
 
-插件是存储在 `extensions` 表里的运行时扩展，可提供 CSS、JS、Head HTML、自定义标签、配置和独立 i18n 文案。
+插件是存储在 `extensions` 表里的运行时插件，可提供可选 HTML 模板、CSS、JS、自定义标签、配置和独立 i18n 文案。
 
 在 `/admin/extensions` 安装或创建插件：
 
 1. 上传 manifest JSON、从 manifest URL 加载，或从内置模板开始。
-2. 编辑 CSS、JS、Head HTML、自定义标签、配置和翻译文案。
+2. 编辑 HTML 模板、CSS、JS、自定义标签、配置和翻译文案。
 3. 确认效果后启用插件。
 
-最小组件插件 JS：
+最小组件插件 HTML：
+
+```html
+<template data-tag="callout-box">
+  <aside class="callout-box" data-title="{{attr:title}}">
+    <strong>{{attr:title}}</strong>
+    <div class="callout-body">{{slot}}</div>
+  </aside>
+</template>
+```
+
+可选组件插件 JS：
 
 ```js
 DocForge.register({
   id: 'callout-box',
-  renderTags: {
-    'callout-box': (el) => {
-      const title = el.getAttribute('title') || '';
-      return `<aside class="callout-box"><strong>${title}</strong>${el.innerHTML}</aside>`;
-    },
+  onLoad() {
+    document.querySelectorAll('.callout-box').forEach((el) => {
+      el.classList.add('is-ready');
+    });
   },
 });
 ```
@@ -190,18 +200,24 @@ DocForge.register({
 
 运行时内容仍然可以使用 `{{t:key}}`、`{{img:key}}`、`{{video:key}}` 这类普通占位符。即使没有启用组件插件，普通 HTML 也仍然有效。
 
+HTML 模板是可选能力。插件可以只写 CSS、只写 JS，也可以 HTML + CSS + JS 联动。模板占位符：
+
+- `{{slot}}`：自定义标签原始内部 HTML。
+- `{{attr:name}}`：读取自定义标签上的属性。
+
 插件卡片提供两个导出动作：
 
 - **分享**：复制安装链接，适合 manifest endpoint 可以公开访问的部署。
 - **下载**：导出当前 manifest JSON，方便把私有插件保存在仓库外。
 
-私有或客户项目专用插件，建议放在本地目录：
+可以公开随项目发布的插件放在 `Plugins/`。私有或客户项目专用插件放在 `PrivatePlugins/`：
 
 ```bash
-mkdir local-extensions
+mkdir Plugins
+mkdir PrivatePlugins
 ```
 
-`local-extensions/` 默认被 git 忽略。可以用来保存本地 manifest 备份或私有插件文件，不会跟随开源项目发布。
+`Plugins/` 会提交到 git。`PrivatePlugins/` 默认被 git 忽略，可以用来保存本地 manifest 备份或私有插件文件，不会跟随开源项目发布。
 
 ---
 
@@ -213,13 +229,14 @@ mkdir local-extensions
 │   ├── db/                  # Drizzle schema 和数据库初始化
 │   ├── routes/              # Hono 路由：admin、api、docs、media
 │   ├── services/            # auth、settings、i18n、extensions
-│   ├── templates/           # 后台、前台、扩展页面模板
+│   ├── templates/           # 后台、前台、插件页面模板
 │   ├── index.ts             # Worker 入口
 │   └── types.ts             # App 类型
 ├── tools/
 │   ├── migrate-d1.mjs       # 本地/远程 D1 迁移脚本
 │   └── push-dev-vars-secrets.mjs
-├── local-extensions/        # 可选私有插件 manifest，本地保留且不进 git
+├── Plugins/                 # 可发布的项目自带插件 manifest
+├── PrivatePlugins/          # 私有本地插件 manifest，不进 git
 ├── .dev.vars.example        # 可提交的本地变量模板
 ├── wrangler.toml            # Cloudflare 配置和安全默认值
 ├── package.json             # npm scripts
@@ -234,10 +251,10 @@ mkdir local-extensions
 
 - `plugins`：文档站点。包含 `slug`、`name`、`version`、`compatibility`、描述、图标、标签、发布状态、自定义 CSS/JS。
 - `sections`：文档章节树。通过 `parent_id` 支持多级目录。
-- `content_blocks`：章节内容块。HTML、代码、文本、图片、视频和扩展块都存为 JSON。
+- `content_blocks`：章节内容块。HTML、代码、文本、图片、视频和插件块都存为 JSON。
 - `media`：媒体文件索引。`d2_key` 对应 R2 对象，`placeholder_key` 对应 `{{img:key}}` / `{{video:key}}`。
 - `translations`：翻译表。按 `plugin_id + key + locale` 存储任意语言文案。
-- `extensions`：扩展清单。保存扩展 CSS、JS、Head HTML、标签、配置和 i18n。
+- `extensions`：插件清单。保存可选 HTML 模板、CSS、JS、标签、配置和 i18n。
 - `site_settings`：站点级设置，如标题、页脚、自定义 CSS、Head HTML。
 - `admins`：后台管理员账号和密码哈希。
 - `analytics_events`：前台访问事件，记录文档、路径、IP、地区、UA 和时间。

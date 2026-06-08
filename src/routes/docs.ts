@@ -5,7 +5,7 @@ import { docPage } from '../templates/doc_page';
 import type { TranslationsMap, MediaMap } from '../templates/doc_page';
 import { notFoundPage } from '../templates/error_pages';
 import { getSettingsMap } from '../services/settings';
-import { loadEnabledExtensions, buildExtensionHead, buildExtensionScripts, buildExtensionI18nInject, buildExtensionMediaInject, buildDocTransInject } from '../services/extensions';
+import { loadEnabledExtensions, buildExtensionHead, buildExtensionHtmlTemplates, buildExtensionScripts, buildExtensionI18nInject, buildExtensionMediaInject, buildDocTransInject } from '../services/extensions';
 import type { AppType } from '../types';
 
 type SectionRow = typeof sections.$inferSelect;
@@ -145,6 +145,7 @@ docsRoutes.get('/:slug', async (c) => {
     extHeadHtml:      buildExtensionHead(enabledExts, lang, mediaMap),
     extI18nHtml:      buildExtensionI18nInject(enabledExts),
     extMediaHtml:     buildExtensionMediaInject(mediaMap),
+    extTemplatesHtml: buildExtensionHtmlTemplates(enabledExts, lang, mediaMap),
     extDocTransHtml:  buildDocTransInject(t, lang),
     extScriptsHtml:   buildExtensionScripts(enabledExts),
   });
@@ -173,6 +174,7 @@ docsRoutes.get('/', async (c) => {
     extHeadHtml:    buildExtensionHead(enabledExts, lang),
     extI18nHtml:    buildExtensionI18nInject(enabledExts),
     extMediaHtml:   '',
+    extTemplatesHtml: buildExtensionHtmlTemplates(enabledExts, lang),
     extScriptsHtml: buildExtensionScripts(enabledExts),
   }));
 });

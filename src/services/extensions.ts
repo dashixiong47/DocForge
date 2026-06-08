@@ -15,6 +15,7 @@ export interface Extension {
   homepage: string;
   extType: ExtType;
   enabled: number;
+  html: string;
   css: string;
   js: string;
   headHtml: string;
@@ -38,6 +39,7 @@ export function extensionManifest(ext: Extension): Record<string, unknown> {
     icon: ext.icon,
     homepage: ext.homepage,
     type: ext.extType,
+    html: ext.html,
     css: ext.css,
     js: ext.js,
     headHtml: ext.headHtml,
@@ -177,6 +179,35 @@ export function buildExtensionI18nInject(exts: Extension[]): string {
   return `<script>Object.assign(DocForge._i18n,${JSON.stringify(data)});</script>`;
 }
 
+function parseHtmlTemplates(html: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  html.replace(/<template\b([^>]*)>([\s\S]*?)<\/template>/gi, (_match, attrs: string, body: string) => {
+    const tag = (attrs.match(/\bdata-tag\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i)?.slice(1).find(Boolean) || '').trim().toLowerCase();
+    if (tag && /^[a-z][a-z0-9-]*-[a-z0-9-]+$/.test(tag)) out[tag] = body.trim();
+    return '';
+  });
+  return out;
+}
+
+/**
+ * Build a <script> that registers optional HTML templates for custom tags.
+ * Template syntax:
+ *   <template data-tag="my-card">
+ *     <div class="my-card" data-title="{{attr:title}}">{{slot}}</div>
+ *   </template>
+ */
+export function buildExtensionHtmlTemplates(exts: Extension[], lang = 'zh', mediaMap?: MediaMap): string {
+  const data: Record<string, Record<string, string>> = {};
+  for (const ext of exts) {
+    if (!ext.html) continue;
+    const resolved = resolveExtContent(ext.html, lang, ext.i18nStrings, mediaMap);
+    const templates = parseHtmlTemplates(resolved);
+    if (Object.keys(templates).length > 0) data[ext.slug] = templates;
+  }
+  if (Object.keys(data).length === 0) return '';
+  return `<script>Object.assign(DocForge._templates,${JSON.stringify(data).replace(/</g,'\\u003c').replace(/>/g,'\\u003e')});</script>`;
+}
+
 /**
  * Build the <script> block for all enabled extensions.
  * Each extension IIFE receives (config, t) where t = DocForge.createT(slug).
@@ -230,6 +261,7 @@ export function validateManifest(raw: unknown): { ok: true; manifest: Partial<Ex
       homepage:     typeof m.homepage    === 'string' ? m.homepage    : '',
       extType:      (['theme','widget','system'].includes(m.type as string) ? m.type : (m.type === 'renderer' ? 'widget' : m.type === 'general' ? 'system' : 'widget')) as ExtType,
       css:          typeof m.css         === 'string' ? m.css         : '',
+      html:         typeof m.html        === 'string' ? m.html        : '',
       js:           typeof m.js          === 'string' ? m.js          : '',
       headHtml:     typeof m.headHtml    === 'string' ? m.headHtml    : '',
       blockTypes:   Array.isArray(m.blockTypes) ? m.blockTypes.filter(t => typeof t === 'string') : [],

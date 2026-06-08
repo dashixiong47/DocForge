@@ -57,7 +57,7 @@ const existingSchemaChecks = {
   '0009_plugin_custom_js.sql': "SELECT name FROM pragma_table_info('plugins') WHERE name='custom_js';",
   '0010_analytics_events.sql': "SELECT name FROM sqlite_master WHERE type='table' AND name='analytics_events';",
   '0011_plugins_compatibility_column.sql': "SELECT name FROM pragma_table_info('plugins') WHERE name='compatibility';",
-  '0012_media_viewer_extension.sql': "SELECT slug FROM extensions WHERE slug='media-viewer';",
+  '0012_extension_html_templates.sql': "SELECT name FROM pragma_table_info('extensions') WHERE name='html';",
 };
 
 runSql(

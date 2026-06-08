@@ -1,0 +1,1 @@
+ALTER TABLE extensions ADD COLUMN html TEXT NOT NULL DEFAULT '';

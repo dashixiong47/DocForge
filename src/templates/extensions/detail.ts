@@ -152,11 +152,11 @@ export function extensionDetail(
       <button class="ed-tab" id="etab-css" onclick="switchEdTab('css',this)">
         CSS<span id="css-dot" style="color:var(--warn);font-size:9px"></span>
       </button>
+      <button class="ed-tab" id="etab-html" onclick="switchEdTab('html',this)" data-i18n-title="editor.extHtmlTitle" title="组件 HTML 模板">
+        HTML<span id="html-dot" style="color:var(--warn);font-size:9px"></span>
+      </button>
       <button class="ed-tab" id="etab-js" onclick="switchEdTab('js',this)">
         JS<span id="js-dot" style="color:var(--warn);font-size:9px"></span>
-      </button>
-      <button class="ed-tab" id="etab-head" onclick="switchEdTab('head',this)" data-i18n-title="editor.headTitle" title="注入到页面 &lt;head&gt; 的 HTML（外部 CDN、meta 标签等）">
-        HTML<span id="head-dot" style="color:var(--warn);font-size:9px"></span>
       </button>
       <div class="ed-tab-sep"></div>
       <button class="ed-tab" id="etab-trans" onclick="switchEdTab('trans',this)" data-i18n="editor.translations">🌐 翻译</button>
@@ -179,11 +179,11 @@ export function extensionDetail(
       <div class="ed-panel" id="panel-css">
         <div id="ace-css" class="ed-panel-ace"></div>
       </div>
+      <div class="ed-panel" id="panel-html">
+        <div id="ace-html" class="ed-panel-ace"></div>
+      </div>
       <div class="ed-panel" id="panel-js">
         <div id="ace-js" class="ed-panel-ace"></div>
-      </div>
-      <div class="ed-panel" id="panel-head">
-        <div id="ace-head" class="ed-panel-ace"></div>
       </div>
 
       <!-- Translation panel -->
@@ -230,7 +230,7 @@ export function extensionDetail(
         </div>
       </div>
 
-      <!-- Media panel — browse all media for reference in extension code -->
+      <!-- Media panel — browse all media for reference in plugin code -->
       <div class="ed-panel" id="panel-media" style="overflow:auto;background:var(--bg)">
         <div style="padding:12px 16px;min-width:600px">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);padding:8px 0;z-index:10;border-bottom:1px solid var(--border)">
@@ -284,13 +284,13 @@ var ACE_OPTS = {
 };
 
 var edCSS  = ace.edit('ace-css');  edCSS.setTheme('ace/theme/'+ACTIVE_THEME);  edCSS.session.setMode('ace/mode/css');        edCSS.setOptions(ACE_OPTS);
+var edHTML = ace.edit('ace-html'); edHTML.setTheme('ace/theme/'+ACTIVE_THEME); edHTML.session.setMode('ace/mode/html');      edHTML.setOptions(ACE_OPTS);
 var edJS   = ace.edit('ace-js');   edJS.setTheme('ace/theme/'+ACTIVE_THEME);   edJS.session.setMode('ace/mode/javascript');  edJS.setOptions(ACE_OPTS);
-var edHead = ace.edit('ace-head'); edHead.setTheme('ace/theme/'+ACTIVE_THEME); edHead.session.setMode('ace/mode/html');      edHead.setOptions(ACE_OPTS);
-var ALL_EDITORS = [edCSS, edJS, edHead];
+var ALL_EDITORS = [edCSS, edHTML, edJS];
 
 edCSS.setValue(${safeJSON(ext.css)}, -1);
+edHTML.setValue(${safeJSON(ext.html)}, -1);
 edJS.setValue(${safeJSON(ext.js)}, -1);
-edHead.setValue(${safeJSON(ext.headHtml)}, -1);
 
 var beautify = null;
 try { beautify = ace.require('ace/ext/beautify'); } catch(e) {}
@@ -347,8 +347,8 @@ function switchEditorLang(l) { document.cookie = 'lang=' + l + ';path=/;max-age=
 applyStaticI18n();
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
-var EXT_PANELS  = ['css', 'js', 'head', 'trans', 'media'];
-var EXT_EDITORS = { css: edCSS, js: edJS, head: edHead };
+var EXT_PANELS  = ['css', 'html', 'js', 'trans', 'media'];
+var EXT_EDITORS = { css: edCSS, html: edHTML, js: edJS };
 var EXT_TAB_STORAGE_KEY = 'docforge.extension.tab.${ext.id}';
 function normalizeExtTab(name) {
   return EXT_PANELS.indexOf(name) !== -1 ? name : 'css';
@@ -368,7 +368,7 @@ function switchEdTab(name, btn) {
   EXT_PANELS.forEach(function(n) {
     var el = document.getElementById('panel-' + n); if (el) el.classList.toggle('active', n === name);
   });
-  var isEd = (name === 'css' || name === 'js' || name === 'head');
+  var isEd = (name === 'css' || name === 'html' || name === 'js');
   document.querySelectorAll('.ed-only').forEach(function(el)    { el.style.display = isEd ? '' : 'none'; });
   document.querySelectorAll('.trans-only').forEach(function(el)  { el.style.display = name === 'trans' ? '' : 'none'; });
   document.querySelectorAll('.media-only').forEach(function(el)  { el.style.display = name === 'media' ? '' : 'none'; });
@@ -380,14 +380,14 @@ switchEdTab(ACTIVE_ED_TAB, document.getElementById('etab-' + ACTIVE_ED_TAB));
 
 // ── Dirty tracking ────────────────────────────────────────────────────────────
 var saved = {
-  css: ${safeJSON(ext.css)}, js: ${safeJSON(ext.js)}, head: ${safeJSON(ext.headHtml)},
+  css: ${safeJSON(ext.css)}, html: ${safeJSON(ext.html)}, js: ${safeJSON(ext.js)},
   name: ${safeJSON(ext.name)}, icon: ${safeJSON(ext.icon)}, type: ${safeJSON(ext.extType)},
   tags: ${safeJSON(ext.tags.join(','))}, bts: ${safeJSON(ext.blockTypes.join(','))}
 };
 function fv(id) { var el = document.getElementById(id); return el ? el.value : ''; }
 function markDirty() {
-  var DOTS = {css:'css-dot',js:'js-dot',head:'head-dot'};
-  var cur = {css:edCSS.getValue(),js:edJS.getValue(),head:edHead.getValue()};
+  var DOTS = {css:'css-dot',html:'html-dot',js:'js-dot'};
+  var cur = {css:edCSS.getValue(),html:edHTML.getValue(),js:edJS.getValue()};
   Object.keys(DOTS).forEach(function(k) {
     var d = document.getElementById(DOTS[k]); if (d) d.textContent = cur[k] !== saved[k] ? ' ●' : '';
   });
@@ -418,15 +418,15 @@ async function saveAll() {
     name: fv('f-name'), slug: fv('f-slug'), icon: fv('f-icon'), extType: fv('f-type'),
     version: fv('f-version'), author: fv('f-author'), description: fv('f-desc'), homepage: fv('f-homepage'),
     blockTypes: bts, tags: tags,
-    css: edCSS.getValue(), js: edJS.getValue(), headHtml: edHead.getValue()
+    css: edCSS.getValue(), html: edHTML.getValue(), js: edJS.getValue()
   };
   var r = await fetch('/api/admin/extensions/${ext.id}', {
     method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
   });
   var d = await r.json();
   if (d.ok) {
-    saved = Object.assign(saved, {css:body.css,js:body.js,head:body.headHtml,name:body.name,icon:body.icon,type:body.extType,tags:body.tags.join(','),bts:body.blockTypes.join(',')});
-    ['css-dot','js-dot','head-dot'].forEach(function(id) { var el=document.getElementById(id); if(el)el.textContent=''; });
+    saved = Object.assign(saved, {css:body.css,html:body.html,js:body.js,name:body.name,icon:body.icon,type:body.extType,tags:body.tags.join(','),bts:body.blockTypes.join(',')});
+    ['css-dot','html-dot','js-dot'].forEach(function(id) { var el=document.getElementById(id); if(el)el.textContent=''; });
     showToast('✓ ' + t('trans.saved'), 'ok');
   } else showToast(t('editor.saveFailed'), 'err');
 }
@@ -440,7 +440,7 @@ var _transAllRows = [];
 var _transContentKeys = [];
 var _transLocales = ['zh', 'en'];
 
-function getExtensionMetaTransEntries() {
+function getPluginMetaTransEntries() {
   var defs = [
     ['meta.name', 'f-name'],
     ['meta.slug', 'f-slug'],
@@ -465,7 +465,7 @@ async function loadTransPanel() {
     if (r.ok) {
       var rows = await r.json();
       if (!Array.isArray(rows)) rows = rows.rows || [];
-      var metaRows = getExtensionMetaTransEntries();
+      var metaRows = getPluginMetaTransEntries();
       var rowMap = {};
       rows.forEach(function(row) { rowMap[row.key] = Object.assign({}, row); });
       metaRows.forEach(function(item) {
@@ -608,7 +608,7 @@ var _mediaItems = [];
 var _mediaRefs = [];
 
 function getExtMediaRefs() {
-  var content = edCSS.getValue() + edJS.getValue() + edHead.getValue();
+  var content = edCSS.getValue() + edHTML.getValue() + edJS.getValue();
   var refs = [];
   var seen = {};
   [...content.matchAll(/\{\{img:([^}]+)\}\}/g)].forEach(function(m) { var key=m[1].trim(); if(key&&!seen['img:'+key]){seen['img:'+key]=true;refs.push({kind:'img',key:key});} });

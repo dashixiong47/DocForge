@@ -85,6 +85,7 @@ export const extensions = sqliteTable('extensions', {
   homepage:     text('homepage').notNull().default(''),
   extType:      text('ext_type').notNull().default('general'),
   enabled:      integer('enabled').notNull().default(1),
+  html:         text('html').notNull().default(''),
   css:          text('css').notNull().default(''),
   js:           text('js').notNull().default(''),
   headHtml:     text('head_html').notNull().default(''),

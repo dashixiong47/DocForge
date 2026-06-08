@@ -42,9 +42,10 @@ a{color:var(--accent);text-decoration:none}input:focus,textarea:focus{outline:no
 .si.child{padding-left:24px;font-size:12px}
 .si-ic{font-size:9px;color:var(--accent);flex-shrink:0}
 .si-lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.si-add{border:none;background:transparent;color:var(--muted);cursor:pointer;padding:2px 7px;font-size:14px;line-height:1;border-radius:4px;transition:.1s;flex-shrink:0;opacity:.35}
+.icon-add{width:26px;height:26px;min-width:26px;padding:0;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;line-height:1}
+.si-add{border:1px solid transparent;background:transparent;color:var(--muted);cursor:pointer;width:24px;height:24px;min-width:24px;padding:0;font-size:16px;font-weight:800;line-height:1;border-radius:6px;transition:.1s;flex-shrink:0;opacity:.45;display:inline-flex;align-items:center;justify-content:center;margin-right:6px}
 .si-row:hover .si-add{opacity:1}
-.si-add:hover{color:var(--ok);background:rgba(63,185,80,.12)}
+.si-add:hover{color:#fff;border-color:var(--ok);background:var(--ok)}
 .sb-ft{border-top:1px solid var(--border);padding:7px 12px;font-size:11px;color:var(--muted);flex-shrink:0;display:flex;justify-content:space-between;align-items:center}
 /* Main area */
 .ide-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
@@ -104,6 +105,7 @@ kbd{font-size:11px;background:var(--surface);border:1px solid var(--border);bord
 .modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;align-items:center;justify-content:center;backdrop-filter:blur(2px);display:none}
 .modal-ov.open{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:400px;max-width:calc(100vw - 32px)}
+.modal-wide{width:520px}
 .modal h3{margin:0 0 18px;font-size:16px;font-weight:700}
 .modal-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
 .modal-hd h3{margin:0}
@@ -231,12 +233,12 @@ export function pluginEditor(
         <select class="sel-theme" id="sel-doc" style="flex:1;font-size:12px;padding:5px 8px;min-width:0">
           ${allPlugins.map((p: any) => `<option value="${p.id}" ${p.id === plugin.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
         </select>
-        <button class="btn btn-sm btn-ok" onclick="openInlinePanel('newdoc')" data-i18n-title="editor.newDoc" title="新建文档" style="flex-shrink:0;padding:5px 8px">+</button>
+        <button class="btn btn-sm btn-ok icon-add" onclick="openInlinePanel('newdoc')" data-i18n-title="editor.newDoc" title="新建文档">+</button>
       </div>
     </div>
     <div class="sb-hd">
       <span class="sb-lbl" data-i18n="editor.sections">章节</span>
-      <button class="btn btn-sm btn-ok" onclick="openInlinePanel('addsec')" data-i18n-title="editor.addSection" title="添加顶级章节">+</button>
+      <button class="btn btn-sm btn-ok icon-add" onclick="openInlinePanel('addsec')" data-i18n-title="editor.addSection" title="添加顶级章节">+</button>
     </div>
     <div class="sb-tree">
       ${allSections.length === 0
@@ -250,11 +252,14 @@ export function pluginEditor(
   <main class="ide-main">
     <!-- Tab bar -->
     <div class="ed-tabs">
-      <button class="ed-tab" id="etab-css"  onclick="switchEdTab('css',this)">
+      <button class="ed-tab" id="etab-css"  onclick="switchEdTab('css',this)"
+        data-i18n-title="editor.cssScopeTitle" title="文档级 CSS，作用于当前文档前台页面">
         CSS<span id="css-dot" style="color:var(--warn);font-size:9px"></span>
       </button>
-      <button class="ed-tab active" id="etab-html" onclick="switchEdTab('html',this)">HTML</button>
-      <button class="ed-tab" id="etab-js"   onclick="switchEdTab('js',this)">
+      <button class="ed-tab active" id="etab-html" onclick="switchEdTab('html',this)"
+        data-i18n-title="editor.htmlScopeTitle" title="当前章节 HTML 内容">HTML</button>
+      <button class="ed-tab" id="etab-js"   onclick="switchEdTab('js',this)"
+        data-i18n-title="editor.jsScopeTitle" title="文档级 JS，作用于当前文档前台页面">
         JS<span id="js-dot" style="color:var(--warn);font-size:9px"></span>
       </button>
       <div class="ed-tab-sep"></div>
@@ -375,74 +380,48 @@ export function pluginEditor(
         </div>
       </div>
 
-      <!-- ── Inline form panels (replace modals) ── -->
-      <div class="ed-panel" id="panel-newdoc" style="background:var(--bg);overflow:auto">
-        <div style="padding:40px 28px;max-width:440px">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-            <button class="btn btn-sm" onclick="closeInlinePanel()" style="color:var(--muted)" data-i18n="editor.back">← 返回</button>
-            <h3 style="margin:0;font-size:16px;font-weight:700" data-i18n="editor.newDoc">新建文档</h3>
-          </div>
-          <div class="mfg"><label data-i18n="docs.slug">文档标识 (slug)</label><input id="nd-slug" placeholder="my-project" autocomplete="off"></div>
-          <div class="mfg"><label data-i18n="docs.name">名称</label><input id="nd-name" placeholder="My Project" autocomplete="off"></div>
-          <div class="btn-group" style="margin-top:20px">
-            <button class="btn btn-primary" onclick="doCreateDoc()" data-i18n="docs.createBtn">创建</button>
-            <button class="btn" onclick="closeInlinePanel()" data-i18n="docs.cancel">取消</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="ed-panel" id="panel-addsec" style="background:var(--bg);overflow:auto">
-        <div style="padding:40px 28px;max-width:440px">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-            <button class="btn btn-sm" onclick="closeInlinePanel()" style="color:var(--muted)" data-i18n="editor.back">← 返回</button>
-            <h3 style="margin:0;font-size:16px;font-weight:700" data-i18n="editor.addSec">添加章节</h3>
-          </div>
-          <div class="mfg"><label data-i18n="editor.nameZh">名称（中文）</label><input id="as-title" placeholder="如：安装说明" autocomplete="off"></div>
-          <div class="mfg"><label data-i18n="editor.slugAnchor">Slug（URL锚点）</label><input id="as-slug" placeholder="installation" autocomplete="off"></div>
-          <div class="btn-group" style="margin-top:20px">
-            <button class="btn btn-primary" onclick="doAddSection(null)" data-i18n="docs.createBtn">创建</button>
-            <button class="btn" onclick="closeInlinePanel()" data-i18n="docs.cancel">取消</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="ed-panel" id="panel-addsub" style="background:var(--bg);overflow:auto">
-        <div style="padding:40px 28px;max-width:440px">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-            <button class="btn btn-sm" onclick="closeInlinePanel()" style="color:var(--muted)" data-i18n="editor.back">← 返回</button>
-            <h3 style="margin:0;font-size:16px;font-weight:700" data-i18n="editor.addSub">添加子章节</h3>
-          </div>
-          <input type="hidden" id="sub-parent-id">
-          <div class="mfg"><label data-i18n="editor.nameZh">名称（中文）</label><input id="sub-title" data-i18n-placeholder="editor.subName" placeholder="子章节名称" autocomplete="off"></div>
-          <div class="mfg"><label data-i18n="editor.slugAnchor">Slug（URL锚点）</label><input id="sub-slug" placeholder="subsection-slug" autocomplete="off"></div>
-          <div class="btn-group" style="margin-top:20px">
-            <button class="btn btn-primary" onclick="doAddSection(+document.getElementById('sub-parent-id').value)" data-i18n="docs.createBtn">创建</button>
-            <button class="btn" onclick="closeInlinePanel()" data-i18n="docs.cancel">取消</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="ed-panel" id="panel-secset" style="background:var(--bg);overflow:auto">
-        <div style="padding:40px 28px;max-width:440px">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-            <button class="btn btn-sm" onclick="closeInlinePanel()" style="color:var(--muted)" data-i18n="editor.back">← 返回</button>
-            <h3 style="margin:0;font-size:16px;font-weight:700" data-i18n="editor.secSettingsTitle">章节设置</h3>
-          </div>
-          <div class="mfg-row">
-            <div class="mfg"><label data-i18n="editor.nameZh">名称（中文）</label><input id="ss-title" value="${esc(activeSection?.titleZh || activeSection?.slug || '')}"></div>
-            <div class="mfg"><label>Slug</label><input id="ss-slug" value="${esc(activeSection?.slug || '')}"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px">
-            <button class="btn btn-danger" onclick="doDelSection()" data-i18n="editor.deleteSec">删除章节</button>
-            <div class="btn-group">
-              <button class="btn" onclick="closeInlinePanel()" data-i18n="docs.cancel">取消</button>
-              <button class="btn btn-primary" onclick="doSaveSecSettings()" data-i18n="docs.save">保存</button>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </main>
+</div>
+
+<!-- Form modals -->
+<div class="modal-ov" id="modal-newdoc" onclick="if(event.target===this)closeInlinePanel()">
+  <div class="modal">
+    <div class="modal-hd"><h3 data-i18n="editor.newDoc">新建文档</h3><button class="modal-close" onclick="closeInlinePanel()">×</button></div>
+    <div class="mfg"><label data-i18n="docs.slug">文档标识 (slug)</label><input id="nd-slug" placeholder="my-project" autocomplete="off"></div>
+    <div class="mfg"><label data-i18n="docs.name">名称</label><input id="nd-name" placeholder="My Project" autocomplete="off"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeInlinePanel()" data-i18n="docs.cancel">取消</button><button class="btn btn-primary" onclick="doCreateDoc()" data-i18n="docs.createBtn">创建</button></div>
+  </div>
+</div>
+<div class="modal-ov" id="modal-addsec" onclick="if(event.target===this)closeInlinePanel()">
+  <div class="modal">
+    <div class="modal-hd"><h3 data-i18n="editor.addSec">添加章节</h3><button class="modal-close" onclick="closeInlinePanel()">×</button></div>
+    <div class="mfg"><label data-i18n="editor.nameZh">名称（中文）</label><input id="as-title" placeholder="如：安装说明" autocomplete="off"></div>
+    <div class="mfg"><label data-i18n="editor.slugAnchor">Slug（URL锚点）</label><input id="as-slug" placeholder="installation" autocomplete="off"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeInlinePanel()" data-i18n="docs.cancel">取消</button><button class="btn btn-primary" onclick="doAddSection(null)" data-i18n="docs.createBtn">创建</button></div>
+  </div>
+</div>
+<div class="modal-ov" id="modal-addsub" onclick="if(event.target===this)closeInlinePanel()">
+  <div class="modal">
+    <div class="modal-hd"><h3 data-i18n="editor.addSub">添加子章节</h3><button class="modal-close" onclick="closeInlinePanel()">×</button></div>
+    <input type="hidden" id="sub-parent-id">
+    <div class="mfg"><label data-i18n="editor.nameZh">名称（中文）</label><input id="sub-title" data-i18n-placeholder="editor.subName" placeholder="子章节名称" autocomplete="off"></div>
+    <div class="mfg"><label data-i18n="editor.slugAnchor">Slug（URL锚点）</label><input id="sub-slug" placeholder="subsection-slug" autocomplete="off"></div>
+    <div class="modal-footer"><button class="btn" onclick="closeInlinePanel()" data-i18n="docs.cancel">取消</button><button class="btn btn-primary" onclick="doAddSection(+document.getElementById('sub-parent-id').value)" data-i18n="docs.createBtn">创建</button></div>
+  </div>
+</div>
+<div class="modal-ov" id="modal-secset" onclick="if(event.target===this)closeInlinePanel()">
+  <div class="modal modal-wide">
+    <div class="modal-hd"><h3 data-i18n="editor.secSettingsTitle">章节设置</h3><button class="modal-close" onclick="closeInlinePanel()">×</button></div>
+    <div class="mfg-row">
+      <div class="mfg"><label data-i18n="editor.nameZh">名称（中文）</label><input id="ss-title" value="${esc(activeSection?.titleZh || activeSection?.slug || '')}"></div>
+      <div class="mfg"><label>Slug</label><input id="ss-slug" value="${esc(activeSection?.slug || '')}"></div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn btn-danger" onclick="doDelSection()" data-i18n="editor.deleteSec">删除章节</button>
+      <div class="btn-group"><button class="btn" onclick="closeInlinePanel()" data-i18n="docs.cancel">取消</button><button class="btn btn-primary" onclick="doSaveSecSettings()" data-i18n="docs.save">保存</button></div>
+    </div>
+  </div>
 </div>
 
 
@@ -589,9 +568,8 @@ if (selDoc) selDoc.addEventListener('change', function() {
 
 // ── Active editor tab ─────────────────────────────────────────────────────────
 var ACTIVE_ED_TAB = 'html';
-var PREV_ED_TAB = 'html';
 var FORM_PANELS = ['newdoc','addsec','addsub','secset'];
-var ALL_PANELS  = ['css','html','js','trans','media','newdoc','addsec','addsub','secset'];
+var ALL_PANELS  = ['css','html','js','trans','media'];
 var ED_TAB_STORAGE_KEY = 'docforge.editor.tab.' + PLUGIN_ID;
 function validEdTab(name) {
   return ['css','html','js','trans','media'].indexOf(name) !== -1;
@@ -606,12 +584,9 @@ function initialEdTab() {
   catch(e) { return 'html'; }
 }
 function switchEdTab(name, btn) {
-  var isFormPanel = FORM_PANELS.indexOf(name) !== -1;
-  if (!isFormPanel) name = normalizeEdTab(name);
+  name = normalizeEdTab(name);
   ACTIVE_ED_TAB = name;
-  if (!isFormPanel) {
-    try { localStorage.setItem(ED_TAB_STORAGE_KEY, name); } catch(e) {}
-  }
+  try { localStorage.setItem(ED_TAB_STORAGE_KEY, name); } catch(e) {}
   document.querySelectorAll('.ed-tab[id^="etab-"]').forEach(function(b) { b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
   ALL_PANELS.forEach(function(n) {
@@ -619,7 +594,7 @@ function switchEdTab(name, btn) {
   });
   // Show/hide contextual toolbar buttons
   var isEd = (name === 'css' || name === 'html' || name === 'js');
-  document.querySelectorAll('.ed-only').forEach(function(el) { el.style.display = (isEd && !isFormPanel) ? '' : 'none'; });
+  document.querySelectorAll('.ed-only').forEach(function(el) { el.style.display = isEd ? '' : 'none'; });
   document.querySelectorAll('.trans-only').forEach(function(el) { el.style.display = name === 'trans' ? '' : 'none'; });
   document.querySelectorAll('.media-only').forEach(function(el) { el.style.display = name === 'media' ? '' : 'none'; });
   // Keep fmt/secset/save hidden if no section selected
@@ -628,12 +603,7 @@ function switchEdTab(name, btn) {
       var el = document.getElementById(id); if (el) el.style.display = 'none';
     });
   }
-  if (isFormPanel) {
-    var lbl = document.getElementById('ed-tab-label');
-    if (lbl) lbl.textContent = '';
-  } else {
-    setTabLabel(name);
-  }
+  setTabLabel(name);
   // Resize active ace editor
   var eds = {css: edCSS, html: edHTML, js: edJS};
   if (eds[name]) setTimeout(function() { eds[name].resize(); }, 10);
@@ -644,14 +614,17 @@ function switchEdTab(name, btn) {
 switchEdTab(initialEdTab(), document.getElementById('etab-' + initialEdTab()));
 
 function openInlinePanel(panelName) {
-  PREV_ED_TAB = ACTIVE_ED_TAB || 'html';
-  switchEdTab(panelName, null);
-  var inp = document.querySelector('#panel-' + panelName + ' input:not([type=hidden])');
+  if (FORM_PANELS.indexOf(panelName) === -1) return;
+  document.querySelectorAll('.modal-ov[id^="modal-"]').forEach(function(el) { el.classList.remove('open'); });
+  var modal = document.getElementById('modal-' + panelName);
+  if (!modal) return;
+  modal.classList.add('open');
+  var inp = modal.querySelector('input:not([type=hidden])');
   if (inp) setTimeout(function() { inp.focus(); }, 50);
 }
 
 function closeInlinePanel() {
-  switchEdTab(PREV_ED_TAB, document.getElementById('etab-' + PREV_ED_TAB));
+  document.querySelectorAll('.modal-ov[id^="modal-"]').forEach(function(el) { el.classList.remove('open'); });
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
@@ -1156,12 +1129,12 @@ async function finishRename() {
   } else showToast('重命名失败', 'err');
 }
 
-// ── Keyboard: ESC closes inline panels or media preview ──────────────────────
+// ── Keyboard: ESC closes modal panels or media preview ───────────────────────
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
   var ov = document.getElementById('media-preview-ov');
   if (ov && ov.style.display !== 'none') { closeMediaPreview(); return; }
-  if (FORM_PANELS.indexOf(ACTIVE_ED_TAB) !== -1) closeInlinePanel();
+  if (document.querySelector('.modal-ov.open[id^="modal-"]')) closeInlinePanel();
 });
 (function() {
   function w(a, b) {
