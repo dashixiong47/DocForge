@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 const root = process.cwd();
 const inputPath = resolve(root, '.dev.vars');
 const wranglerBin = resolve(root, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+const secretKeys = ['ADMIN_USERNAME', 'ADMIN_PASSWORD', 'JWT_SECRET', 'AI_TRANSLATE_API_KEY'];
 
 if (!existsSync(inputPath)) {
   console.error('Missing .dev.vars. Create it first: Copy-Item .dev.vars.example .dev.vars');
@@ -59,9 +60,13 @@ if (!secrets.JWT_SECRET || secrets.JWT_SECRET === 'local-dev-secret-change-me' |
   console.log('Generated JWT_SECRET and wrote it back to .dev.vars.');
 }
 
-console.log(`Uploading ${Object.keys(secrets).length} variables from .dev.vars to Cloudflare Secrets...`);
+const secretsToUpload = Object.fromEntries(
+  Object.entries(secrets).filter(([key]) => secretKeys.includes(key))
+);
 
-for (const [key, value] of Object.entries(secrets)) {
+console.log(`Uploading ${Object.keys(secretsToUpload).length} secrets from .dev.vars to Cloudflare...`);
+
+for (const [key, value] of Object.entries(secretsToUpload)) {
   console.log(`Uploading ${key}...`);
   const result = spawnSync(process.execPath, [wranglerBin, 'secret', 'put', key], {
     cwd: root,
