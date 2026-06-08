@@ -19,6 +19,34 @@ const TRANS_PAGE_SIZE = 20;
 
 export const adminRoutes = new Hono<AppType>();
 
+async function ensureDocMetaTranslations(
+  db: ReturnType<typeof import('../db').createDB>,
+  plugin: { id: number; name: string; description: string | null },
+): Promise<void> {
+  const meta = [
+    { key: 'meta.name', value: plugin.name || '' },
+    { key: 'meta.description', value: plugin.description || '' },
+  ];
+  const now = new Date().toISOString();
+  for (const item of meta) {
+    for (const locale of ['zh', 'en']) {
+      const existing = await db.select({ id: translations.id })
+        .from(translations)
+        .where(and(eq(translations.pluginId, plugin.id), eq(translations.key, item.key), eq(translations.locale, locale)))
+        .get();
+      if (!existing) {
+        await db.insert(translations).values({
+          pluginId: plugin.id,
+          key: item.key,
+          locale,
+          value: locale === 'zh' ? item.value : '',
+          updatedAt: now,
+        }).run();
+      }
+    }
+  }
+}
+
 adminRoutes.get('/login', (c) => c.html(adminPage.login()));
 
 adminRoutes.post('/login', async (c) => {
@@ -206,6 +234,7 @@ adminRoutes.get('/plugins/:id/translations', async (c) => {
   const db = c.get('db');
   const plugin = await db.select().from(plugins).where(eq(plugins.id, id)).get();
   if (!plugin) return c.html(adminPage.notFound('Plugin not found'));
+  await ensureDocMetaTranslations(db, plugin);
 
   // All top-level sections (for the filter sidebar)
   const allSections = await db.select().from(sections)

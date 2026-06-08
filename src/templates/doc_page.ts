@@ -289,13 +289,15 @@ export function docLayout(params: {
   const { plugin, sections, blocksBySection, settings, lang, translations, mediaMap = new Map(), availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '', extDocTransHtml = '' } = params;
   const badgeTags = JSON.parse(plugin.badgeTags || '[]') as string[];
   const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
+  const docName = resolve(translations, 'meta.name', lang, plugin.name);
+  const docDesc = resolve(translations, 'meta.description', lang, plugin.description || '');
 
   return `<!doctype html>
 <html lang="${htmlLang}" class="${lang === 'en' ? 'lang-en' : 'lang-zh'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(plugin.name)} ${docUI('nav.docs', lang)}</title>
+<title>${esc(docName)} ${docUI('nav.docs', lang)}</title>
 ${faviconLink(plugin.iconUrl || '')}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
@@ -478,7 +480,7 @@ ${extDocTransHtml}
 <nav class="topbar">
   <div class="topbar-inner">
     <div class="topbar-title">
-      <span>${esc(plugin.name)}</span>
+      <span>${esc(docName)}</span>
       <span style="color:var(--c-muted);font-weight:400;font-size:14px"> ${docUI('nav.docs', lang)}</span>
     </div>
     <div class="topbar-actions">
@@ -498,8 +500,8 @@ ${extDocTransHtml}
 </nav>
 
 <header class="hero">
-  <h1>${esc(plugin.name)}</h1>
-  <p class="subtitle">${esc(plugin.description || '')}</p>
+  <h1>${esc(docName)}</h1>
+  <p class="subtitle">${esc(docDesc)}</p>
   <div class="badges">
     <span class="badge">v${esc(plugin.version)}</span>
     ${plugin.compatibility ? `<span class="badge ok">${esc(plugin.compatibility)}</span>` : ''}
@@ -519,7 +521,7 @@ ${sections.length > 0
 </div></div>
 
 <footer style="text-align:center;padding:40px 24px;color:var(--c-muted);font-size:13px;border-top:1px solid var(--c-border);margin-top:24px">
-  ${settings.footer_text ? settings.footer_text : `&copy; ${new Date().getFullYear()} ${esc(plugin.name)} Documentation`}
+  ${settings.footer_text ? settings.footer_text : `&copy; ${new Date().getFullYear()} ${esc(docName)} Documentation`}
 </footer>
 <button id="back-top" class="back-top" type="button" aria-label="${esc(docUI('nav.backTop', lang))}" title="${esc(docUI('nav.backTop', lang))}">
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m18 15-6-6-6 6"/></svg>
@@ -697,6 +699,7 @@ export function home(params: {
   plugins: Plugin[];
   settings: Record<string, string>;
   lang: string;
+  pluginTranslations?: Map<number, TranslationsMap>;
   availableLocales?: string[];
   extHeadHtml?: string;
   extScriptsHtml?: string;
@@ -704,7 +707,7 @@ export function home(params: {
   extMediaHtml?: string;
   extTemplatesHtml?: string;
 }): string {
-  const { plugins: pluginList, settings, lang, availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '' } = params;
+  const { plugins: pluginList, settings, lang, pluginTranslations = new Map(), availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '' } = params;
   const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
   return `<!doctype html><html lang="${htmlLang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -794,16 +797,19 @@ document.addEventListener('DOMContentLoaded', function() {
   <section class="plugin-list">
     ${pluginList.map(p => {
       const badgeTags = JSON.parse(p.badgeTags || '[]') as string[];
+      const metaTranslations = pluginTranslations.get(p.id) || new Map();
+      const displayName = resolve(metaTranslations, 'meta.name', lang, p.name);
+      const displayDesc = resolve(metaTranslations, 'meta.description', lang, p.description || '');
       return `
     <a href="/${esc(p.slug)}" class="plugin-card">
       <div class="plugin-card-top">
         <div class="plugin-card-icon">${p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="" />` : '<span style="color:var(--c-accent)">&#9679;</span>'}</div>
         <div class="plugin-card-info">
-          <h3>${esc(p.name)}</h3>
+          <h3>${esc(displayName)}</h3>
           <p>/${esc(p.slug)}</p>
         </div>
       </div>
-      <p class="plugin-card-desc">${esc(p.description || '')}</p>
+      <p class="plugin-card-desc">${esc(displayDesc)}</p>
       <div class="plugin-card-foot">
         <div class="plugin-card-badges">
           <span class="badge" style="font-size:11px;padding:4px 8px">v${esc(p.version)}</span>

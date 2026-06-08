@@ -171,6 +171,14 @@ npm run typecheck</code></pre>
 ];
 
 const translations = {
+  'meta.name': {
+    zh: 'DocForge',
+    en: 'DocForge',
+  },
+  'meta.description': {
+    zh: '面向插件和项目文档的开源文档 CMS。',
+    en: 'Open-source documentation CMS for plugin and project docs.',
+  },
   'docforge.overview.p.0': {
     zh: 'DocForge 是一个运行在 Cloudflare Workers 上的轻量文档系统，用 D1 保存文档结构、翻译、媒体索引和插件配置，用 R2 保存媒体文件。',
     en: 'DocForge is a lightweight documentation system on Cloudflare Workers, using D1 for content, translations, media indexes, and plugin configuration, and R2 for media files.',
@@ -245,7 +253,7 @@ async function main() {
       name: 'DocForge',
       version: '1.0.0',
       compatibility: 'Cloudflare Workers',
-      description: 'Open-source documentation CMS for plugin and project docs.',
+      description: '面向插件和项目文档的开源文档 CMS。',
       badgeTags: JSON.stringify(['Workers', 'D1', 'R2', 'Plugins']),
       sortOrder: -100,
       enabled: true,
@@ -258,7 +266,7 @@ async function main() {
       name: 'DocForge',
       version: '1.0.0',
       compatibility: 'Cloudflare Workers',
-      description: 'Open-source documentation CMS for plugin and project docs.',
+      description: '面向插件和项目文档的开源文档 CMS。',
       badgeTags: JSON.stringify(['Workers', 'D1', 'R2', 'Plugins']),
       sortOrder: -100,
       enabled: true,

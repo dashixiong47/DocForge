@@ -208,6 +208,62 @@ async function registerI18nKeys(
   return changed;
 }
 
+async function upsertTranslation(
+  db: ReturnType<typeof import('../db').createDB>,
+  pluginId: number,
+  key: string,
+  locale: string,
+  value: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await db.select({ id: translations.id })
+    .from(translations)
+    .where(and(eq(translations.pluginId, pluginId), eq(translations.key, key), eq(translations.locale, locale)))
+    .get();
+  if (existing) {
+    await db.update(translations).set({ value, updatedAt: now }).where(eq(translations.id, existing.id)).run();
+  } else {
+    await db.insert(translations).values({ pluginId, key, locale, value, updatedAt: now }).run();
+  }
+}
+
+async function ensureTranslation(
+  db: ReturnType<typeof import('../db').createDB>,
+  pluginId: number,
+  key: string,
+  locale: string,
+  defaultValue = '',
+): Promise<void> {
+  const existing = await db.select({ id: translations.id })
+    .from(translations)
+    .where(and(eq(translations.pluginId, pluginId), eq(translations.key, key), eq(translations.locale, locale)))
+    .get();
+  if (!existing) {
+    await db.insert(translations).values({
+      pluginId,
+      key,
+      locale,
+      value: defaultValue,
+      updatedAt: new Date().toISOString(),
+    }).run();
+  }
+}
+
+async function syncPluginMetaTranslations(
+  db: ReturnType<typeof import('../db').createDB>,
+  pluginId: number,
+  body: { name?: string; description?: string },
+): Promise<void> {
+  if (body.name !== undefined) {
+    await upsertTranslation(db, pluginId, 'meta.name', 'zh', body.name || '');
+    await ensureTranslation(db, pluginId, 'meta.name', 'en');
+  }
+  if (body.description !== undefined) {
+    await upsertTranslation(db, pluginId, 'meta.description', 'zh', body.description || '');
+    await ensureTranslation(db, pluginId, 'meta.description', 'en');
+  }
+}
+
 export const apiRoutes = new Hono<AppType>();
 
 // ─── Public: Language Preference ───
@@ -254,6 +310,7 @@ apiRoutes.post('/admin/plugins', async (c) => {
     createdAt: now,
     updatedAt: now,
   }).returning().get();
+  await syncPluginMetaTranslations(db, result.id, { name: result.name, description: result.description || '' });
   return c.json(result);
 });
 
@@ -277,6 +334,7 @@ apiRoutes.put('/admin/plugins/:id', async (c) => {
     ...(body.customJs !== undefined ? { customJs: body.customJs } : {}),
     updatedAt: now,
   }).where(eq(plugins.id, id)).run();
+  await syncPluginMetaTranslations(db, id, body);
   return c.json({ ok: true });
 });
 

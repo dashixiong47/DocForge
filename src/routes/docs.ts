@@ -160,6 +160,20 @@ docsRoutes.get('/', async (c) => {
     getSettingsMap(db),
     loadEnabledExtensions(db),
   ]);
+  const pluginTranslations = new Map<number, TranslationsMap>();
+  const pluginIds = allPlugins.map(p => p.id);
+  if (pluginIds.length > 0) {
+    const metaRows = await db.select().from(translations)
+      .where(inArray(translations.pluginId, pluginIds))
+      .all();
+    for (const row of metaRows) {
+      if (row.key !== 'meta.name' && row.key !== 'meta.description') continue;
+      if (!pluginTranslations.has(row.pluginId)) pluginTranslations.set(row.pluginId, new Map());
+      const map = pluginTranslations.get(row.pluginId)!;
+      if (!map.has(row.key)) map.set(row.key, {});
+      map.get(row.key)![row.locale] = row.value;
+    }
+  }
   // Collect available locales from system translations
   let availableLocales: string[] = ['zh', 'en'];
   const systemPlugin = await db.select().from(plugins).where(eq(plugins.slug, '__system__')).get();
@@ -170,7 +184,7 @@ docsRoutes.get('/', async (c) => {
     if (locs.length > 0) availableLocales = locs;
   }
   return c.html(docPage.home({
-    plugins: allPlugins, settings, lang, availableLocales,
+    plugins: allPlugins, settings, lang, availableLocales, pluginTranslations,
     extHeadHtml:    buildExtensionHead(enabledExts, lang),
     extI18nHtml:    buildExtensionI18nInject(enabledExts),
     extMediaHtml:   '',
