@@ -38,7 +38,6 @@ function extI18n(ext: Extension, key: string, lang: string, fallback: string): s
 }
 
 const SHARE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.6 15.4 7.4M8.6 13.4l6.8 3.2"/></svg>';
-const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
 
 // ─── Plugins list page (inside admin layout) ──────────────────────────────────
 export function extensionsList(exts: Extension[], lang = 'zh'): string {
@@ -124,11 +123,16 @@ export function extensionsList(exts: Extension[], lang = 'zh'): string {
 .ext-actions{display:flex;gap:6px;align-items:center;border-top:1px solid var(--border);padding-top:10px;margin-top:auto;min-width:0}
 .ext-state{font-size:12px;color:var(--muted);flex:1 0 auto;min-width:max-content;white-space:nowrap}
 .ext-actions .btn{flex-shrink:0;white-space:nowrap}
-.share-mini{display:flex;align-items:center;gap:6px;border-top:1px solid rgba(48,54,61,.55);padding-top:9px}
-.share-mini-label{font-size:12px;color:var(--muted)}
-.share-mini .toggle{width:30px;height:16px}
-.share-mini .toggle-slider::before{width:10px;height:10px;left:3px;bottom:3px}
-.share-mini .toggle input:checked+.toggle-slider::before{transform:translateX(14px)}
+.share-box{width:min(640px,100%);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:0 24px 80px rgba(0,0,0,.55)}
+.share-card{border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:12px;margin-top:12px}
+.share-card-title{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.share-field{display:flex;gap:8px;align-items:center;margin-top:8px;min-width:0}
+.share-field input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;font-size:12px}
+.share-field .btn{flex-shrink:0}
+.share-setting{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.share-setting strong{display:block;font-size:13px}
+.share-setting span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+@media(max-width:760px){.share-field{flex-wrap:wrap}.share-field input{flex-basis:100%}.share-field .btn{flex:1;justify-content:center}}
 .toggle{position:relative;width:36px;height:20px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0}
 .toggle-slider{position:absolute;inset:0;background:#30363d;border-radius:20px;cursor:pointer;transition:.2s}
@@ -207,8 +211,7 @@ ${exts.length === 0 ? `
           <div class="ext-meta">v<span data-ext-i18n="${ext.id}:meta.version" data-fallback="${esc(ext.version)}">${esc(displayVersion)}</span>${ext.author ? ' · <span data-ext-i18n="' + ext.id + ':meta.author" data-fallback="' + esc(ext.author) + '">' + esc(displayAuthor) + '</span>' : ''} · <code style="font-size:10px" data-ext-i18n="${ext.id}:meta.slug" data-fallback="${esc(ext.slug)}">${esc(displaySlug)}</code></div>
         </div>
         <div class="ext-head-actions">
-          <button class="icon-btn" onclick="shareExt(${ext.id},'${esc(ext.slug)}')" data-i18n-title="ext.share" title="分享" aria-label="Share">${SHARE_ICON}</button>
-          <button class="icon-btn" onclick="downloadExt(${ext.id},'${esc(ext.slug)}')" data-i18n-title="ext.download" title="下载" aria-label="Download">${DOWNLOAD_ICON}</button>
+          <button class="icon-btn" onclick="openShareModal(${ext.id},'${esc(ext.slug)}',${ext.shareNotify ? 1 : 0})" data-i18n-title="ext.shareSettings" title="分享设置" aria-label="Share">${SHARE_ICON}</button>
         </div>
       </div>
       ${ext.description ? `<div class="ext-desc" data-ext-i18n="${ext.id}:meta.description" data-fallback="${esc(ext.description)}">${esc(displayDesc)}</div>` : ''}
@@ -217,13 +220,6 @@ ${exts.length === 0 ? `
         ${displayTags.map(t => `<span class="chip chip-tag">#${esc(t)}</span>`).join('')}
       </div>` : ''}
       <div class="ext-update" id="ext-update-${ext.id}" style="display:none;font-size:12px;color:var(--warn);border:1px solid rgba(210,153,29,.25);background:rgba(210,153,29,.08);border-radius:6px;padding:7px 9px"></div>
-      <div class="share-mini">
-        <label class="toggle" data-i18n-title="ext.shareNotifyToggle" title="允许安装回传">
-          <input type="checkbox" ${ext.shareNotify ? 'checked' : ''} onchange="toggleShareNotify(${ext.id},this)">
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="share-mini-label" data-i18n="ext.shareNotify">安装回传</span>
-      </div>
       <div class="ext-actions">
         <label class="toggle">
           <input type="checkbox" ${ext.enabled ? 'checked' : ''} onchange="toggleExt(${ext.id},this)">
@@ -236,6 +232,44 @@ ${exts.length === 0 ? `
     </div>`;
   }).join('')}
 </div>`}
+
+<div class="modal-ov" id="share-modal">
+  <div class="share-box" onclick="event.stopPropagation()">
+    <div class="modal-hd">
+      <h3 data-i18n="ext.shareSettings">分享设置</h3>
+      <button class="modal-close" onclick="closeModal('share-modal')">✕</button>
+    </div>
+    <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6" data-i18n="ext.shareDesc">复制安装链接给其他 DocForge 站点安装，也可以下载 manifest 文件离线分发。</p>
+    <div class="share-card">
+      <div class="share-setting">
+        <div>
+          <strong data-i18n="ext.shareNotify">安装回传</strong>
+          <span data-i18n="ext.shareNotifyToggle">允许安装方通知本插件安装次数</span>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="share-notify-input" onchange="toggleShareNotifyFromModal(this)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="share-card">
+      <strong class="share-card-title" data-i18n="ext.installUrl">安装链接</strong>
+      <div class="share-field">
+        <input id="share-install-url" readonly>
+        <button class="btn btn-primary" onclick="copyShareField('share-install-url')" data-i18n="ext.copyShareLink">复制分享链接</button>
+      </div>
+    </div>
+    <div class="share-card">
+      <strong class="share-card-title" data-i18n="ext.manifestUrl">Manifest 链接</strong>
+      <div class="share-field">
+        <input id="share-manifest-url" readonly>
+        <button class="btn btn-outline" onclick="copyShareField('share-manifest-url')" data-i18n="ext.copyManifestLink">复制 Manifest 链接</button>
+        <button class="btn btn-outline" onclick="downloadCurrentShare()" data-i18n="ext.download">下载</button>
+      </div>
+    </div>
+    <div id="share-modal-status" style="min-height:18px;margin-top:10px;font-size:12px;color:var(--muted)"></div>
+  </div>
+</div>
 
 <!-- ── Install Modal ── -->
 <div class="modal-ov" id="install-modal">
@@ -447,19 +481,47 @@ function applyExtCardsI18n(){
   });
 }
 applyExtCardsI18n();
-async function shareExt(id,slug){
+var _shareState={id:0,slug:'',installUrl:'',manifestUrl:'',notify:false};
+async function openShareModal(id,slug,notify){
+  _shareState={id:id,slug:slug,installUrl:'',manifestUrl:'',notify:!!notify};
+  document.getElementById('share-install-url').value='';
+  document.getElementById('share-manifest-url').value='';
+  document.getElementById('share-modal-status').textContent=t('editor.loading')||'Loading...';
+  document.getElementById('share-notify-input').checked=!!notify;
+  openModal('share-modal');
   var r=await fetch('/api/admin/extensions/'+id+'/share');
   var d=await r.json();
   if(!d.ok){alert(t('ext.shareFailed')+': '+(d.error||''));return;}
-  var text=d.installUrl;
-  try{await navigator.clipboard.writeText(text);alert(t('ext.shareCopied')+'\\n'+text);}
+  _shareState.installUrl=d.installUrl||'';
+  _shareState.manifestUrl=d.manifestUrl||'';
+  _shareState.notify=!!d.shareNotify;
+  document.getElementById('share-install-url').value=_shareState.installUrl;
+  document.getElementById('share-manifest-url').value=_shareState.manifestUrl;
+  document.getElementById('share-notify-input').checked=_shareState.notify;
+  document.getElementById('share-modal-status').textContent='';
+}
+async function copyShareField(id){
+  var text=document.getElementById(id).value;
+  if(!text)return;
+  try{await navigator.clipboard.writeText(text);document.getElementById('share-modal-status').textContent=t('ext.shareCopied');}
   catch(e){prompt(t('ext.shareLink'),text);}
 }
-async function toggleShareNotify(id,cb){
-  var r=await fetch('/api/admin/extensions/'+id+'/share-notify',{method:'PUT'});
+async function toggleShareNotifyFromModal(cb){
+  if(!_shareState.id)return;
+  var before=!cb.checked;
+  var r=await fetch('/api/admin/extensions/'+_shareState.id+'/share-notify',{method:'PUT'});
   var d=await r.json();
-  if(d.ok){cb.checked=!!d.shareNotify;}
-  else{cb.checked=!cb.checked;alert(t('ext.operationFailed')+': '+(d.error||''));}
+  if(d.ok){
+    cb.checked=!!d.shareNotify;
+    _shareState.notify=!!d.shareNotify;
+    document.getElementById('share-modal-status').textContent=t('settings.saved')||'Saved';
+  }else{
+    cb.checked=before;
+    alert(t('ext.operationFailed')+': '+(d.error||''));
+  }
+}
+function downloadCurrentShare(){
+  if(_shareState.id)downloadExt(_shareState.id,_shareState.slug);
 }
 async function downloadExt(id,slug){
   try{
