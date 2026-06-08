@@ -81,6 +81,7 @@ function queryJson(sql, label) {
   });
 
   if (result.status !== 0) {
+    console.error(`D1 query failed (${label}): ${sql}`);
     process.stdout.write(result.stdout || '');
     process.stderr.write(result.stderr || '');
     process.exit(result.status ?? 1);
