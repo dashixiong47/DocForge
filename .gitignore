@@ -29,6 +29,9 @@ public/theme.css
 # Local data / import scripts
 scripts/
 
+# Private extension manifests and local-only plugins
+local-extensions/
+
 # Sensitive local config overrides
 .env
 .env.local

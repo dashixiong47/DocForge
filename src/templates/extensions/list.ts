@@ -199,6 +199,7 @@ ${exts.length === 0 ? `
         </div>
         <div class="ext-head-actions">
           <button class="icon-btn" onclick="shareExt(${ext.id},'${esc(ext.slug)}')" data-i18n-title="ext.share" title="分享">↗</button>
+          <button class="icon-btn" onclick="downloadExt(${ext.id},'${esc(ext.slug)}')" data-i18n-title="ext.download" title="下载">↓</button>
         </div>
       </div>
       ${ext.description ? `<div class="ext-desc" data-ext-i18n="${ext.id}:meta.description" data-fallback="${esc(ext.description)}">${esc(displayDesc)}</div>` : ''}
@@ -429,6 +430,23 @@ async function shareExt(id,slug){
   var text=install;
   try{await navigator.clipboard.writeText(text);alert(t('ext.shareCopied')+'\\n'+text);}
   catch(e){prompt(t('ext.shareLink'),text);}
+}
+async function downloadExt(id,slug){
+  try{
+    var r=await fetch('/api/admin/extensions/'+id+'/manifest');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    var manifest=await r.json();
+    var text=JSON.stringify(manifest,null,2);
+    var blob=new Blob([text],{type:'application/json;charset=utf-8'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=(slug||'extension')+'.docforge-extension.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},0);
+  }catch(e){
+    alert(t('ext.downloadFail')+': '+(e&&e.message?e.message:e));
+  }
 }
 async function checkExtUpdates(){
   var r=await fetch('/api/admin/extensions/check-updates',{method:'POST'});

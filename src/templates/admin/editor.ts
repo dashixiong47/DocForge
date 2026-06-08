@@ -592,9 +592,26 @@ var ACTIVE_ED_TAB = 'html';
 var PREV_ED_TAB = 'html';
 var FORM_PANELS = ['newdoc','addsec','addsub','secset'];
 var ALL_PANELS  = ['css','html','js','trans','media','newdoc','addsec','addsub','secset'];
+var ED_TAB_STORAGE_KEY = 'docforge.editor.tab.' + PLUGIN_ID;
+function validEdTab(name) {
+  return ['css','html','js','trans','media'].indexOf(name) !== -1;
+}
+function normalizeEdTab(name) {
+  if (!validEdTab(name)) return 'html';
+  if (!SECTION_ID && (name === 'trans' || name === 'media')) return 'html';
+  return name;
+}
+function initialEdTab() {
+  try { return normalizeEdTab(localStorage.getItem(ED_TAB_STORAGE_KEY) || 'html'); }
+  catch(e) { return 'html'; }
+}
 function switchEdTab(name, btn) {
-  ACTIVE_ED_TAB = name;
   var isFormPanel = FORM_PANELS.indexOf(name) !== -1;
+  if (!isFormPanel) name = normalizeEdTab(name);
+  ACTIVE_ED_TAB = name;
+  if (!isFormPanel) {
+    try { localStorage.setItem(ED_TAB_STORAGE_KEY, name); } catch(e) {}
+  }
   document.querySelectorAll('.ed-tab[id^="etab-"]').forEach(function(b) { b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
   ALL_PANELS.forEach(function(n) {
@@ -624,6 +641,7 @@ function switchEdTab(name, btn) {
   if (name === 'trans') loadTransPanel();
   if (name === 'media') loadMediaPanel();
 }
+switchEdTab(initialEdTab(), document.getElementById('etab-' + initialEdTab()));
 
 function openInlinePanel(panelName) {
   PREV_ED_TAB = ACTIVE_ED_TAB || 'html';
@@ -698,9 +716,10 @@ async function _loadSection(sid, clk) {
     var ph = document.getElementById('ed-placeholder'); if (ph) ph.style.display = 'none';
     edHTML.setReadOnly(false);
     edHTML.setValue(blocksToText(blks), -1);
-    edHTML.focus();
-    // Switch to HTML tab when loading a section
-    if (ACTIVE_ED_TAB !== 'html') switchEdTab('html', document.getElementById('etab-html'));
+    var rememberedTab = initialEdTab();
+    switchEdTab(rememberedTab, document.getElementById('etab-' + rememberedTab));
+    var focusedEditor = {css: edCSS, html: edHTML, js: edJS}[ACTIVE_ED_TAB];
+    if (focusedEditor) focusedEditor.focus();
   } catch(e) { showToast('加载失败: ' + e.message, 'err'); }
   if (ld) ld.style.display = 'none';
 }
@@ -990,6 +1009,9 @@ function filterMedia(q) {
 
 function renderMediaRefCard(ref, m) {
   var token = '{{' + ref.kind + ':' + ref.key + '}}';
+  var elementToken = ref.kind === 'video'
+    ? '<video src="' + token + '" controls></video>'
+    : '<img src="' + token + '" alt="" loading="lazy" />';
   var exists = !!(m && !String(m.d2Key || '').startsWith('__ref__'));
   var isVideo = exists && (m.mimeType||'').startsWith('video/');
   var isImage = exists && (m.mimeType||'').startsWith('image/');
@@ -1013,7 +1035,8 @@ function renderMediaRefCard(ref, m) {
     + '</div>'
     + '<div class="media-ref-actions">'
       + action
-      + (exists ? '<button class="btn btn-sm" data-copy="' + token.replace(/"/g,'&quot;') + '" onclick="copyText(this.dataset.copy)">📋</button>' : '')
+      + '<button class="btn btn-sm" data-copy="' + elementToken.replace(/"/g,'&quot;') + '" onclick="copyText(this.dataset.copy)">&lt;&gt;</button>'
+      + (exists ? '<button class="btn btn-sm" data-copy="' + token.replace(/"/g,'&quot;') + '" onclick="copyText(this.dataset.copy)">URL</button>' : '')
     + '</div>'
   + '</div>';
 }

@@ -191,34 +191,6 @@ export type TranslationsMap = Map<string, Record<string, string>>;
 // media: placeholderKey → {url, alt, mimeType}
 export type MediaMap = Map<string, { url: string; alt: string; mimeType: string }>;
 
-// Lightbox HTML + CSS + JS — injected once into docLayout
-const LIGHTBOX = `
-<div id="lb-ov" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:zoom-out" onclick="this.style.display='none'">
-  <img id="lb-img" src="" alt="" style="max-width:92vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6);object-fit:contain">
-  <button onclick="event.stopPropagation();lbPrev()" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:50%;width:42px;height:42px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">‹</button>
-  <button onclick="event.stopPropagation();lbNext()" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:50%;width:42px;height:42px;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center">›</button>
-  <button onclick="document.getElementById('lb-ov').style.display='none'" style="position:absolute;top:14px;right:18px;background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:50%;width:36px;height:36px;font-size:20px;cursor:pointer">✕</button>
-</div>
-<script>
-var _lbImgs=[],_lbIdx=0;
-function lbOpen(imgs,i){_lbImgs=imgs;_lbIdx=i;var ov=document.getElementById('lb-ov');ov.style.display='flex';document.getElementById('lb-img').src=imgs[i];}
-function lbPrev(){_lbIdx=(_lbIdx-1+_lbImgs.length)%_lbImgs.length;document.getElementById('lb-img').src=_lbImgs[_lbIdx];}
-function lbNext(){_lbIdx=(_lbIdx+1)%_lbImgs.length;document.getElementById('lb-img').src=_lbImgs[_lbIdx];}
-document.addEventListener('keydown',function(e){
-  var ov=document.getElementById('lb-ov');
-  if(ov.style.display==='flex'){if(e.key==='ArrowLeft')lbPrev();else if(e.key==='ArrowRight')lbNext();else if(e.key==='Escape')ov.style.display='none';}
-});
-// Make all content images clickable
-document.addEventListener('DOMContentLoaded',function(){
-  var imgs=Array.from(document.querySelectorAll('.content img'));
-  var srcs=imgs.map(function(i){return i.src;});
-  imgs.forEach(function(img,idx){
-    img.style.cursor='zoom-in';
-    img.addEventListener('click',function(){lbOpen(srcs,idx);});
-  });
-});
-</script>`;
-
 // SSR: replace {{t:key}} with the text for the current lang
 function applyI18n(html: string, t: TranslationsMap, lang: string): string {
   return html.replace(/\{\{t:([^}]+)\}\}/g, (match, rawKey) => {
@@ -232,15 +204,18 @@ function applyI18n(html: string, t: TranslationsMap, lang: string): string {
 function applyPlaceholders(html: string, mediaMap: MediaMap): string {
   return html
     .replace(/\{\{img:([^}]+)\}\}/g, (match, rawKey) => {
-      const m = mediaMap.get(rawKey.trim());
-      if (!m) return `<span style="display:inline-block;padding:4px 8px;border:1px dashed var(--c-border);border-radius:4px;color:var(--c-muted);font-size:12px">📷 ${esc(rawKey.trim())}</span>`;
-      return `<img src="${esc(m.url)}" alt="${esc(m.alt)}" loading="lazy" style="max-width:100%;border-radius:8px;margin:8px 0;display:block">`;
+      return mediaUrl(mediaMap, rawKey.trim(), 'img', match);
     })
     .replace(/\{\{video:([^}]+)\}\}/g, (match, rawKey) => {
-      const m = mediaMap.get(rawKey.trim());
-      if (!m) return `<span style="display:inline-block;padding:4px 8px;border:1px dashed var(--c-border);border-radius:4px;color:var(--c-muted);font-size:12px">🎬 ${esc(rawKey.trim())}</span>`;
-      return `<video src="${esc(m.url)}" controls style="max-width:100%;border-radius:8px;margin:8px 0;display:block"></video>`;
+      return mediaUrl(mediaMap, rawKey.trim(), 'video', match);
     });
+}
+
+function mediaUrl(mediaMap: MediaMap, key: string, kind: 'img' | 'video', fallback: string): string {
+  const m = mediaMap.get(key);
+  if (m?.url && !m.url.includes('/__ref__/')) return esc(m.url);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540"><rect width="960" height="540" fill="#0d1117"/><rect x="40" y="40" width="880" height="460" rx="18" fill="none" stroke="#30363d" stroke-width="3" stroke-dasharray="16 12"/><text x="480" y="252" dominant-baseline="middle" text-anchor="middle" fill="#8b949e" font-family="Arial, sans-serif" font-size="34">${kind === 'img' ? 'Image' : 'Video'} missing</text><text x="480" y="306" dominant-baseline="middle" text-anchor="middle" fill="#58a6ff" font-family="Consolas, monospace" font-size="22">${fallback.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 function faviconLink(icon: string): string {
@@ -290,15 +265,26 @@ export function docLayout(params: {
   const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
 
   return `<!doctype html>
-<html lang="${htmlLang}">
+<html lang="${htmlLang}" class="${lang === 'en' ? 'lang-en' : 'lang-zh'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(plugin.name)} ${docUI('nav.docs', lang)}</title>
 ${faviconLink(plugin.iconUrl || '')}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/css.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/json.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
 ${settings.custom_head_html || ''}
-${settings.custom_css ? `<style>${settings.custom_css}</style>` : docThemeCSS()}
+${docThemeCSS()}
+${settings.custom_css ? `<style>${settings.custom_css}</style>` : ''}
 ${extHeadHtml}
 ${plugin.customCss ? `<style>/* doc: ${esc(plugin.slug)} */\n${plugin.customCss}</style>` : ''}
 ${extHeadHtml || extScriptsHtml ? `<script>${DOCFORGE_RUNTIME}</script>` : ''}
@@ -314,9 +300,51 @@ ${extDocTransHtml}
 .doc-lp-menu li{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:14px}
 .doc-lp-menu li:hover{background:rgba(88,166,255,.08);color:var(--c-accent)}
 .doc-lp-menu li.active{color:var(--c-accent);font-weight:600}
+.code-block{border:1px solid var(--c-border);border-radius:var(--radius);background:var(--c-surface);box-shadow:var(--shadow-sm);overflow:hidden;margin:14px 0}
+.code-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--c-border);background:rgba(13,17,23,.6)}
+.code-lang{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--c-muted);text-transform:uppercase;letter-spacing:.04em}
+.code-copy{border:1px solid var(--c-border);background:var(--c-code-bg);color:var(--c-muted);padding:3px 8px;border-radius:6px;font:inherit;font-size:11px;cursor:pointer}
+.code-copy:hover{border-color:var(--c-accent);color:var(--c-accent)}
+.code-block pre{margin:0;border:0;border-radius:0;box-shadow:none;background:transparent}
+.code-block pre code{white-space:pre}
+.code-block pre code.hljs{padding:16px 20px;background:transparent}
 </style>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    if (window.hljs) {
+      var aliases = { cpp: 'cpp', cxx: 'cpp', cc: 'cpp', h: 'cpp', hpp: 'cpp', xml: 'xml', html: 'xml', rml: 'xml', text: 'plaintext', txt: 'plaintext' };
+      document.querySelectorAll('.content pre').forEach(function(pre) {
+        var code = pre.querySelector('code');
+        if (!code) return;
+        var langClass = Array.from(code.classList).find(function(c) { return c.indexOf('language-') === 0; }) || '';
+        var lang = (langClass.replace('language-', '') || code.dataset.lang || '').toLowerCase();
+        var normalized = aliases[lang] || lang;
+        if (normalized) {
+          if (langClass) code.classList.remove(langClass);
+          code.classList.add('language-' + normalized);
+        }
+        if (!pre.parentElement || !pre.parentElement.classList.contains('code-block')) {
+          var wrap = document.createElement('div');
+          wrap.className = 'code-block';
+          var toolbar = document.createElement('div');
+          toolbar.className = 'code-toolbar';
+          var copyLabel = document.documentElement.classList.contains('lang-en') ? 'Copy' : '复制';
+          var copiedLabel = document.documentElement.classList.contains('lang-en') ? 'Copied' : '已复制';
+          toolbar.innerHTML = '<span class="code-lang">' + (lang || 'code') + '</span><button type="button" class="code-copy">' + copyLabel + '</button>';
+          pre.parentNode.insertBefore(wrap, pre);
+          wrap.appendChild(toolbar);
+          wrap.appendChild(pre);
+          toolbar.querySelector('.code-copy').addEventListener('click', function() {
+            navigator.clipboard.writeText(code.textContent || '').then(function() {
+              toolbar.querySelector('.code-copy').textContent = copiedLabel;
+              setTimeout(function() { toolbar.querySelector('.code-copy').textContent = copyLabel; }, 1200);
+            });
+          });
+        }
+        try { window.hljs.highlightElement(code); } catch (_) {}
+      });
+    }
+
     // Lang picker
     var dlpBtn=document.getElementById('doc-lp-btn');
     var dlpMenu=document.getElementById('doc-lp-menu');
@@ -433,7 +461,6 @@ ${sections.length > 0
 <footer style="text-align:center;padding:40px 24px;color:var(--c-muted);font-size:13px;border-top:1px solid var(--c-border);margin-top:24px">
   ${settings.footer_text ? settings.footer_text : `&copy; ${new Date().getFullYear()} ${esc(plugin.name)} Documentation`}
 </footer>
-${LIGHTBOX}
 ${extScriptsHtml}
 </body></html>`;
 }
@@ -443,10 +470,11 @@ function renderTOC(sections: Section[], t: TranslationsMap, lang: string): strin
     const children = s.children || [];
     let html = '';
     if (children.length > 0) {
-      html += `<div class="toc-category">${esc(sectionTitle(s, t, lang))}</div>`;
+      html += `<div class="toc-section"><div class="toc-category">${esc(sectionTitle(s, t, lang))}</div>`;
       for (const child of children) {
         html += `<a href="#${esc(child.slug)}" class="toc-link toc-child-link">${esc(sectionTitle(child, t, lang))}</a>`;
       }
+      html += `</div>`;
     } else {
       html += `<a href="#${esc(s.slug)}" class="toc-link">${esc(sectionTitle(s, t, lang))}</a>`;
     }
@@ -473,6 +501,9 @@ function renderSection(
   lang: string,
 ): string {
   const blocks = blocksBySection.get(section.id) || [];
+  if (blocks.length === 0 && children.length > 0) {
+    return children.map(child => renderSection(child, child.children || [], blocksBySection, t, m, lang)).join('');
+  }
   let html = `<section class="section" id="${esc(section.slug)}">`;
   html += `<h2>${esc(sectionTitle(section, t, lang))}</h2>`;
   for (const block of blocks) html += renderBlock(block, t, m, lang);
@@ -530,8 +561,8 @@ function renderBlock(block: ContentBlock, t: TranslationsMap, m: MediaMap = new 
     case 'image': {
       if (content.key) {
         const md = m.get(String(content.key));
-        if (md) return `<img src="${esc(md.url)}" alt="${esc(String(content.alt || md.alt || ''))}" loading="lazy" onerror="docImgErr(this)" style="max-width:100%;border-radius:8px;margin:12px 0;display:block" />`;
-        return `<span style="display:inline-block;padding:4px 8px;border:1px dashed var(--c-border);border-radius:4px;color:var(--c-muted);font-size:12px">📷 ${esc(String(content.key))}</span>`;
+        const src = md ? md.url : mediaUrl(m, String(content.key), 'img', `{{img:${String(content.key)}}}`);
+        return `<img src="${esc(src)}" alt="${esc(String(content.alt || md?.alt || ''))}" loading="lazy" onerror="docImgErr(this)" style="max-width:100%;border-radius:8px;margin:12px 0;display:block" />`;
       }
       return content.src ? `<img src="${esc(String(content.src))}" alt="${esc(String(content.alt || ''))}" loading="lazy" onerror="docImgErr(this)" style="max-width:100%;border-radius:8px;margin:12px 0;display:block" />` : '';
     }
@@ -539,8 +570,8 @@ function renderBlock(block: ContentBlock, t: TranslationsMap, m: MediaMap = new 
     case 'video': {
       if (content.key) {
         const md = m.get(String(content.key));
-        if (md) return `<video src="${esc(md.url)}" controls style="max-width:100%;border-radius:8px;margin:12px 0;display:block"></video>`;
-        return `<span style="display:inline-block;padding:4px 8px;border:1px dashed var(--c-border);border-radius:4px;color:var(--c-muted);font-size:12px">🎬 ${esc(String(content.key))}</span>`;
+        const src = md ? md.url : mediaUrl(m, String(content.key), 'video', `{{video:${String(content.key)}}}`);
+        return `<video src="${esc(src)}" controls style="max-width:100%;border-radius:8px;margin:12px 0;display:block"></video>`;
       }
       return content.src ? `<video src="${esc(String(content.src))}" controls style="max-width:100%;border-radius:8px;margin:12px 0;display:block"></video>` : '';
     }

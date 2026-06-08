@@ -6,6 +6,16 @@
 
 ---
 
+## 项目优势
+
+- **编辑器优先**：文档、章节、HTML/CSS/JS、翻译和媒体都在同一个后台完成。
+- **多语言内建**：文档内容、系统界面和扩展文案共用同一套翻译流程。
+- **媒体友好**：媒体 key 解析为普通 URL，既能写原生 `<img>` / `<video>`，也能使用更强的媒体组件。
+- **扩展运行时**：插件可增加自定义标签、CSS、JS、Head HTML 和可复用文档组件。
+- **Cloudflare 原生部署**：基于 Workers、D1、R2 运行，不需要维护独立服务端。
+
+---
+
 ## 一键部署
 
 第一次部署前先创建 Cloudflare 资源，并把 `wrangler.toml` 里的 `database_id` 改成真实 D1 ID：
@@ -56,7 +66,14 @@ git 默认账号是 `admin` / `admin123`。本地请在 `.dev.vars` 修改自己
 
 ---
 
-## 变量配置
+## 变量与 Secrets
+
+这个仓库把可提交配置和私有值分开：
+
+- `wrangler.toml` 会提交到 git，只放安全默认值、绑定和资源名称。
+- `.dev.vars.example` 会提交到 git，作为本地变量模板。
+- `.dev.vars` 只用于本地，保存开发变量和需要推送到 Cloudflare Secrets 的私有值。
+- Cloudflare Secrets 属于部署环境状态，通过 `npm run secrets:push` 同步，不写入仓库。
 
 提交到 git 的默认变量在 `wrangler.toml`：
 
@@ -69,7 +86,7 @@ SITE_TITLE = "DocForge"
 SITE_DOMAIN = ""
 ```
 
-本地和部署使用 `.dev.vars` 覆盖：
+从模板创建 `.dev.vars`，私有值只写在这里：
 
 ```ini
 ADMIN_USERNAME=my-admin
@@ -80,18 +97,30 @@ SITE_DOMAIN=https://example.com
 AI_TRANSLATE_API_KEY=sk-...
 ```
 
-修改部署变量的流程：
+更新线上 Secrets：
 
 ```bash
-# 1. 修改本地 .dev.vars
-# 2. 同步到 Cloudflare Secrets
-npm run secrets:push
+# 第一次才需要：
+cp .dev.vars.example .dev.vars
 
-# 3. 重新部署
+# 本地修改 .dev.vars 后，把 secret 值同步到 Cloudflare：
+npm run secrets:push
+```
+
+如果只是 secret 值变化，执行 `secrets:push` 就够了。代码、迁移、绑定或非 secret Worker 配置变化时，再重新部署：
+
+```bash
 npm run deploy
 ```
 
-`.dev.vars`、`.env`、`.env.local`、`.wrangler/` 都不会上传 git。
+默认不会上传 git 的本地文件和目录：
+
+- `.dev.vars`
+- `.env`
+- `.env.local`
+- `.wrangler/`
+- `local-extensions/`
+- `scripts/`
 
 ---
 
@@ -103,6 +132,76 @@ npm run deploy
 - **SSR Templates**：后台和前台页面由 TypeScript 模板渲染。
 - **Extension Runtime**：扩展可注入 CSS、JS、Head HTML，并提供自定义标签/块渲染能力。
 - **i18n System**：系统文案、文档文案、扩展文案分别进入翻译表，可批量保存和 AI 翻译。
+
+---
+
+## 媒体用法
+
+`{{img:key}}` 和 `{{video:key}}` 是 URL token。需要完全控制属性和样式时，直接放进普通 HTML 标签：
+
+```html
+<img src="{{img:hero-screenshot}}" alt="" loading="lazy" />
+<video src="{{video:demo-clip}}" controls></video>
+```
+
+需要更强的展示能力时，可以启用内置 `Media Viewer` 扩展，使用组件标签：
+
+```html
+<media-image key="hero-screenshot" fit="cover" caption="Main UI" lightbox="true"></media-image>
+<media-gallery keys="shot-1 shot-2 shot-3" mode="scroll" ratio="16/9"></media-gallery>
+<media-video key="demo-clip" poster="video-poster" controls="true"></media-video>
+```
+
+组件层是可选增强；普通 `<img>` 和 `<video>` 写法会继续保留。
+
+---
+
+## 插件用法
+
+插件是存储在 `extensions` 表里的运行时扩展，可提供 CSS、JS、Head HTML、自定义标签、配置和独立 i18n 文案。
+
+在 `/admin/extensions` 安装或创建插件：
+
+1. 上传 manifest JSON、从 manifest URL 加载，或从内置模板开始。
+2. 编辑 CSS、JS、Head HTML、自定义标签、配置和翻译文案。
+3. 确认效果后启用插件。
+
+最小组件插件 JS：
+
+```js
+DocForge.register({
+  id: 'callout-box',
+  renderTags: {
+    'callout-box': (el) => {
+      const title = el.getAttribute('title') || '';
+      return `<aside class="callout-box"><strong>${title}</strong>${el.innerHTML}</aside>`;
+    },
+  },
+});
+```
+
+文档中使用：
+
+```html
+<callout-box title="{{t:callout.title}}">
+  <img src="{{img:hero-screenshot}}" alt="" loading="lazy" />
+</callout-box>
+```
+
+运行时内容仍然可以使用 `{{t:key}}`、`{{img:key}}`、`{{video:key}}` 这类普通占位符。即使没有启用组件插件，普通 HTML 也仍然有效。
+
+插件卡片提供两个导出动作：
+
+- **分享**：复制安装链接，适合 manifest endpoint 可以公开访问的部署。
+- **下载**：导出当前 manifest JSON，方便把私有插件保存在仓库外。
+
+私有或客户项目专用插件，建议放在本地目录：
+
+```bash
+mkdir local-extensions
+```
+
+`local-extensions/` 默认被 git 忽略。可以用来保存本地 manifest 备份或私有插件文件，不会跟随开源项目发布。
 
 ---
 
@@ -120,6 +219,7 @@ npm run deploy
 ├── tools/
 │   ├── migrate-d1.mjs       # 本地/远程 D1 迁移脚本
 │   └── push-dev-vars-secrets.mjs
+├── local-extensions/        # 可选私有插件 manifest，本地保留且不进 git
 ├── .dev.vars.example        # 可提交的本地变量模板
 ├── wrangler.toml            # Cloudflare 配置和安全默认值
 ├── package.json             # npm scripts

@@ -212,6 +212,8 @@ function renderGrid(items){
     var stub=isStub(m),img=isImg(m),vid=isVid(m);
     var pkey=e2(m.placeholderKey||'');
     var d2k=e2(m.d2Key||'');
+    var mediaToken=vid?'{{video:'+pkey+'}}':'{{img:'+pkey+'}}';
+    var mediaElement=vid?'<video src="'+mediaToken+'" controls></video>':'<img src="'+mediaToken+'" alt="" loading="lazy" />';
     html+='<div class="media-card'+(stub?' is-stub':'')+'">';
 
     // Thumbnail / stub zone
@@ -219,7 +221,7 @@ function renderGrid(items){
       html+='<div class="stub-zone" data-action="stub-upload" data-key="'+pkey+'" title="'+tr('media.uploadFileTitle')+'">'
         +ICON_UPLOAD
         +'<span style="font-size:12px;font-weight:600;margin-top:2px">'+tr('media.clickUpload')+'</span>'
-        +'<span class="stub-key">{{img:'+pkey+'}}</span>'
+        +'<span class="stub-key">'+mediaToken+'</span>'
         +'</div>';
     }else if(img){
       html+='<div class="media-thumb"><img src="/media/'+d2k+'" loading="lazy" onerror="imgErr(this)"><span class="thumb-icon" style="display:none">📷</span><span class="thumb-type">IMG</span></div>';
@@ -233,18 +235,18 @@ function renderGrid(items){
     html+='<div class="media-info">';
     html+='<div class="media-name" title="'+e2(m.filename)+'">'+e2(m.filename)+'</div>';
     if(!stub)html+='<div class="media-meta">'+((m.sizeBytes||0)/1024).toFixed(1)+' KB · '+e2(m.mimeType)+'</div>';
-    if(m.placeholderKey)html+='<div class="media-key" title="{{img:'+pkey+'}}">{{img:'+pkey+'}}</div>';
+    if(m.placeholderKey)html+='<div class="media-key" title="'+mediaElement.replace(/"/g,'&quot;')+'">'+mediaToken+'</div>';
     html+='</div>';
 
     // Actions
     html+='<div class="media-actions">';
     if(stub){
       html+='<button class="btn btn-primary btn-sm" data-action="stub-upload" data-key="'+pkey+'" title="'+tr('media.uploadFileTitle')+'">'+ICON_UPLOAD+' '+tr('editor.upload').replace(/^⬆\\s*/,'')+'</button>';
-      html+='<button class="btn btn-outline btn-sm btn-icon" data-action="copy" data-val="{{img:'+pkey+'}}" title="'+tr('media.copyImgKey')+'">'+ICON_COPY+'</button>';
+      html+='<button class="btn btn-outline btn-sm btn-icon" data-action="copy" data-val="'+mediaElement.replace(/"/g,'&quot;')+'" title="'+tr('media.copyMediaElement')+'">'+ICON_COPY+'</button>';
     }else{
       html+='<button class="btn btn-outline btn-sm btn-icon" data-action="set-key" data-id="'+m.id+'" data-key="'+pkey+'" title="'+tr('media.setKey')+'">'+ICON_KEY+'</button>';
       html+='<button class="btn btn-outline btn-sm btn-icon" data-action="copy" data-val="/media/'+d2k+'" title="'+tr('media.copyUrl')+'">'+ICON_COPY+'</button>';
-      if(m.placeholderKey)html+='<button class="btn btn-outline btn-sm btn-icon" data-action="copy" data-val="{{img:'+pkey+'}}" title="'+tr('media.copyImgKey')+'"><code style="font-size:9px">img</code></button>';
+      if(m.placeholderKey)html+='<button class="btn btn-outline btn-sm btn-icon" data-action="copy" data-val="'+mediaElement.replace(/"/g,'&quot;')+'" title="'+tr('media.copyMediaElement')+'"><code style="font-size:9px">'+(vid?'vid':'img')+'</code></button>';
       html+='<button class="btn btn-outline btn-sm btn-icon" data-action="preview" data-url="/media/'+d2k+'" title="'+tr('media.preview')+'">'+ICON_EYE+'</button>';
     }
     html+='<button class="btn btn-danger btn-sm btn-icon" data-action="del" data-id="'+m.id+'" title="'+tr('docs.delete')+'">'+ICON_TRASH+'</button>';

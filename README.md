@@ -6,6 +6,16 @@ Lightweight documentation CMS with admin editing, published docs, media placehol
 
 ---
 
+## Features
+
+- **Editor-first workflow**: manage docs, sections, HTML/CSS/JS, translations, and media from one admin UI.
+- **Multilingual by design**: document content, system UI, and extension strings share the same translation workflow.
+- **Media-friendly docs**: media keys resolve to normal URLs, so authors can use plain `<img>` / `<video>` tags or richer media components.
+- **Extensible runtime**: plugins can add custom tags, CSS, JS, Head HTML, and reusable documentation widgets.
+- **Cloudflare-native deployment**: runs on Workers with D1 for data and R2 for media, without a separate server to maintain.
+
+---
+
 ## One-Command Deploy
 
 Create Cloudflare resources first, then update `database_id` in `wrangler.toml` with the real D1 database ID:
@@ -56,7 +66,14 @@ Committed defaults are `admin` / `admin123`. Change your local credentials in `.
 
 ---
 
-## Variables
+## Variables and Secrets
+
+This repository keeps deployable configuration and private values separate:
+
+- `wrangler.toml` is committed and should only contain safe defaults, bindings, and resource names.
+- `.dev.vars.example` is committed as a template.
+- `.dev.vars` is local only. Use it for development values and Cloudflare Secret values.
+- Cloudflare Secrets are deployment state. They are pushed with `npm run secrets:push`; they are not stored in git.
 
 Committed defaults live in `wrangler.toml`:
 
@@ -69,7 +86,7 @@ SITE_TITLE = "DocForge"
 SITE_DOMAIN = ""
 ```
 
-Use `.dev.vars` for local and deploy-time overrides:
+Create `.dev.vars` from the example and keep private values there:
 
 ```ini
 ADMIN_USERNAME=my-admin
@@ -80,18 +97,30 @@ SITE_DOMAIN=https://example.com
 AI_TRANSLATE_API_KEY=sk-...
 ```
 
-To change deployed variables:
+Update deployed secrets:
 
 ```bash
-# 1. Edit local .dev.vars
-# 2. Sync to Cloudflare Secrets
-npm run secrets:push
+# First time only:
+cp .dev.vars.example .dev.vars
 
-# 3. Deploy again
+# Edit .dev.vars locally, then push secret values to Cloudflare:
+npm run secrets:push
+```
+
+If only secret values changed, `secrets:push` is enough. Run `npm run deploy` again when code, migrations, bindings, or non-secret Worker configuration changed:
+
+```bash
 npm run deploy
 ```
 
-`.dev.vars`, `.env`, `.env.local`, and `.wrangler/` are ignored by git.
+Ignored local files and folders:
+
+- `.dev.vars`
+- `.env`
+- `.env.local`
+- `.wrangler/`
+- `local-extensions/`
+- `scripts/`
 
 ---
 
@@ -103,6 +132,76 @@ npm run deploy
 - **SSR Templates**: admin and public pages are rendered from TypeScript templates.
 - **Extension Runtime**: extensions can inject CSS, JS, Head HTML, and custom renderers.
 - **i18n System**: system UI, document content, and extension strings are stored in translations and can use batch or AI translation.
+
+---
+
+## Media Usage
+
+`{{img:key}}` and `{{video:key}}` are URL tokens. Use them inside normal HTML when you want full control over attributes and styling:
+
+```html
+<img src="{{img:hero-screenshot}}" alt="" loading="lazy" />
+<video src="{{video:demo-clip}}" controls></video>
+```
+
+For richer presentation, enable the built-in `Media Viewer` extension and use component tags:
+
+```html
+<media-image key="hero-screenshot" fit="cover" caption="Main UI" lightbox="true"></media-image>
+<media-gallery keys="shot-1 shot-2 shot-3" mode="scroll" ratio="16/9"></media-gallery>
+<media-video key="demo-clip" poster="video-poster" controls="true"></media-video>
+```
+
+The component layer is optional; plain `<img>` and `<video>` remain supported.
+
+---
+
+## Extension Usage
+
+Extensions are runtime add-ons stored in the `extensions` table. They can provide CSS, JS, Head HTML, custom tags, config, and their own i18n strings.
+
+Install or create extensions from `/admin/extensions`:
+
+1. Upload a manifest JSON file, load a manifest URL, or start from a built-in template.
+2. Edit CSS, JS, Head HTML, custom tags, config, and translation strings.
+3. Enable the extension when it is ready.
+
+Minimal widget extension JS:
+
+```js
+DocForge.register({
+  id: 'callout-box',
+  renderTags: {
+    'callout-box': (el) => {
+      const title = el.getAttribute('title') || '';
+      return `<aside class="callout-box"><strong>${title}</strong>${el.innerHTML}</aside>`;
+    },
+  },
+});
+```
+
+Usage in a document:
+
+```html
+<callout-box title="{{t:callout.title}}">
+  <img src="{{img:hero-screenshot}}" alt="" loading="lazy" />
+</callout-box>
+```
+
+Runtime content can still use normal placeholders such as `{{t:key}}`, `{{img:key}}`, and `{{video:key}}`. Plain HTML remains valid even when a component extension is not enabled.
+
+Extension cards include two export actions:
+
+- **Share** copies an install URL for deployments where the manifest endpoint is public.
+- **Download** exports the current manifest JSON so you can keep private plugins outside this repository.
+
+For private or client-specific plugins, keep local copies under `local-extensions/`:
+
+```bash
+mkdir local-extensions
+```
+
+`local-extensions/` is ignored by git by default. Use it for local manifest backups or private plugin work that should not be published with the open-source project.
 
 ---
 
@@ -120,6 +219,7 @@ npm run deploy
 ├── tools/
 │   ├── migrate-d1.mjs       # local/remote D1 migration runner
 │   └── push-dev-vars-secrets.mjs
+├── local-extensions/        # optional private extension manifests, ignored by git
 ├── .dev.vars.example        # committed local variable template
 ├── wrangler.toml            # Cloudflare config and safe defaults
 ├── package.json             # npm scripts

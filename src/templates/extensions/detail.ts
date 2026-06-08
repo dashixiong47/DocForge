@@ -149,7 +149,7 @@ export function extensionDetail(
   <main class="ide-main">
     <!-- Tab bar -->
     <div class="ed-tabs">
-      <button class="ed-tab active" id="etab-css" onclick="switchEdTab('css',this)">
+      <button class="ed-tab" id="etab-css" onclick="switchEdTab('css',this)">
         CSS<span id="css-dot" style="color:var(--warn);font-size:9px"></span>
       </button>
       <button class="ed-tab" id="etab-js" onclick="switchEdTab('js',this)">
@@ -176,7 +176,7 @@ export function extensionDetail(
     <!-- Editor + panels -->
     <div class="ed-wrap">
       <!-- Code editors -->
-      <div class="ed-panel active" id="panel-css">
+      <div class="ed-panel" id="panel-css">
         <div id="ace-css" class="ed-panel-ace"></div>
       </div>
       <div class="ed-panel" id="panel-js">
@@ -347,12 +347,22 @@ function switchEditorLang(l) { document.cookie = 'lang=' + l + ';path=/;max-age=
 applyStaticI18n();
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
-var ACTIVE_ED_TAB = 'css';
 var EXT_PANELS  = ['css', 'js', 'head', 'trans', 'media'];
 var EXT_EDITORS = { css: edCSS, js: edJS, head: edHead };
+var EXT_TAB_STORAGE_KEY = 'docforge.extension.tab.${ext.id}';
+function normalizeExtTab(name) {
+  return EXT_PANELS.indexOf(name) !== -1 ? name : 'css';
+}
+function initialExtTab() {
+  try { return normalizeExtTab(localStorage.getItem(EXT_TAB_STORAGE_KEY) || 'css'); }
+  catch(e) { return 'css'; }
+}
+var ACTIVE_ED_TAB = initialExtTab();
 
 function switchEdTab(name, btn) {
+  name = normalizeExtTab(name);
   ACTIVE_ED_TAB = name;
+  try { localStorage.setItem(EXT_TAB_STORAGE_KEY, name); } catch(e) {}
   document.querySelectorAll('.ed-tab[id^="etab-"]').forEach(function(b) { b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
   EXT_PANELS.forEach(function(n) {
@@ -366,6 +376,7 @@ function switchEdTab(name, btn) {
   if (name === 'trans') loadTransPanel();
   if (name === 'media') loadMediaPanel();
 }
+switchEdTab(ACTIVE_ED_TAB, document.getElementById('etab-' + ACTIVE_ED_TAB));
 
 // ── Dirty tracking ────────────────────────────────────────────────────────────
 var saved = {
@@ -636,6 +647,9 @@ function filterMedia(q) {
 
 function renderMediaRefCard(ref,m){
   var token='{{'+ref.kind+':'+ref.key+'}}';
+  var elementToken=ref.kind==='video'
+    ? '<video src="'+token+'" controls></video>'
+    : '<img src="'+token+'" alt="" loading="lazy" />';
   var exists=!!(m&&!String(m.d2Key||'').startsWith('__ref__'));
   var isVideo=exists&&(m.mimeType||'').startsWith('video/');
   var isImage=exists&&(m.mimeType||'').startsWith('image/');
@@ -644,7 +658,7 @@ function renderMediaRefCard(ref,m){
   return '<div class="media-ref-card'+(exists?'':' missing')+'">'
     +'<div class="media-ref-thumb" '+(exists?'data-preview-url="/media/'+String(m.d2Key||'').replace(/"/g,'&quot;')+'" data-preview-video="'+(isVideo?'1':'0')+'" onclick="openMediaPreview(this.dataset.previewUrl,!!Number(this.dataset.previewVideo))" style="cursor:zoom-in"':'')+'>'+thumb+'<span class="media-ref-badge">'+ref.kind+'</span></div>'
     +'<div class="media-ref-body"><div class="media-ref-key" title="'+token+'">'+token+'</div><div class="media-ref-name">'+(exists?m.filename:ref.key)+'</div><div class="media-ref-meta">'+meta+'</div></div>'
-    +'<div class="media-ref-actions">'+(exists?'<button class="btn btn-sm" data-copy="'+token.replace(/"/g,'&quot;')+'" onclick="copyText(this.dataset.copy)">📋</button>':'')+'</div>'
+    +'<div class="media-ref-actions"><button class="btn btn-sm" data-copy="'+elementToken.replace(/"/g,'&quot;')+'" onclick="copyText(this.dataset.copy)">&lt;&gt;</button>'+(exists?'<button class="btn btn-sm" data-copy="'+token.replace(/"/g,'&quot;')+'" onclick="copyText(this.dataset.copy)">URL</button>':'')+'</div>'
     +'</div>';
 }
 

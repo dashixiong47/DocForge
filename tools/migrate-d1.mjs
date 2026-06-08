@@ -33,6 +33,12 @@ function runWrangler(args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+function runSql(sql, label) {
+  const file = resolve(tmpDir, `${label}-${mode}.sql`);
+  writeFileSync(file, sql);
+  runWrangler(['d1', 'execute', dbName, modeFlag, '--file', file]);
+}
+
 function sqlString(value) {
   return String(value).replace(/'/g, "''");
 }
@@ -50,13 +56,14 @@ const existingSchemaChecks = {
   '0008_plugin_enabled.sql': "SELECT name FROM pragma_table_info('plugins') WHERE name='enabled';",
   '0009_plugin_custom_js.sql': "SELECT name FROM pragma_table_info('plugins') WHERE name='custom_js';",
   '0010_analytics_events.sql': "SELECT name FROM sqlite_master WHERE type='table' AND name='analytics_events';",
+  '0011_plugins_compatibility_column.sql': "SELECT name FROM pragma_table_info('plugins') WHERE name='compatibility';",
+  '0012_media_viewer_extension.sql': "SELECT slug FROM extensions WHERE slug='media-viewer';",
 };
 
-runWrangler([
-  'd1', 'execute', dbName, modeFlag,
-  '--command',
-  "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))",
-]);
+runSql(
+  "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')));",
+  'migration-bootstrap',
+);
 
 function queryJson(sql, label) {
   const marker = resolve(tmpDir, `${label}-${mode}.sql`);
@@ -76,24 +83,25 @@ function queryJson(sql, label) {
   }
 
   try {
-    return JSON.parse(result.stdout || '[]');
+    const stdout = result.stdout || '[]';
+    const jsonStart = stdout.indexOf('[');
+    return JSON.parse(jsonStart >= 0 ? stdout.slice(jsonStart) : stdout);
   } catch {
     return result.stdout || '';
   }
 }
 
 function hasRows(queryResult) {
-  if (typeof queryResult === 'string') return queryResult.includes('"results"') && !queryResult.includes('"results":[]');
+  if (typeof queryResult === 'string') return false;
   const results = Array.isArray(queryResult) ? queryResult : [queryResult];
   return results.some(item => Array.isArray(item?.results) && item.results.length > 0);
 }
 
 function markApplied(file) {
-  runWrangler([
-    'd1', 'execute', dbName, modeFlag,
-    '--command',
-    `INSERT OR IGNORE INTO schema_migrations (filename) VALUES ('${sqlString(file)}')`,
-  ]);
+  runSql(
+    `INSERT OR IGNORE INTO schema_migrations (filename) VALUES ('${sqlString(file)}');`,
+    'migration-mark-applied',
+  );
 }
 
 for (const file of migrationFiles) {
