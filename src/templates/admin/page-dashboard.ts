@@ -6,10 +6,17 @@ export const dashboard = () => adminLayout({
 .dash-grid{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-top:14px}
 .dash-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
 .dash-card h3{margin:0 0 12px;font-size:14px}
-.chart-bars{height:180px;display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--border);padding-top:8px}
-.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0}
-.bar{width:100%;max-width:34px;min-height:3px;border-radius:5px 5px 0 0;background:linear-gradient(180deg,var(--accent),rgba(88,166,255,.32))}
+.chart-bars{height:180px;display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid var(--border);padding-top:8px;position:relative;overflow:visible}
+.bar-wrap{flex:1;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;min-width:0;position:relative;cursor:default;border-radius:6px}
+.bar-wrap:hover,.bar-wrap:focus-visible{background:rgba(88,166,255,.06);outline:none}
+.bar{width:100%;max-width:34px;min-height:3px;border-radius:5px 5px 0 0;background:linear-gradient(180deg,var(--accent),rgba(88,166,255,.32));transition:filter .15s,box-shadow .15s}
+.bar-wrap:hover .bar,.bar-wrap:focus-visible .bar{filter:brightness(1.16);box-shadow:0 0 0 1px rgba(88,166,255,.3),0 8px 18px rgba(88,166,255,.16)}
 .bar-lbl{font-size:10px;color:var(--muted);white-space:nowrap}
+.bar-tip{position:absolute;left:50%;top:-8px;transform:translate(-50%,-100%) translateY(4px);opacity:0;pointer-events:none;z-index:20;min-width:96px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:rgba(13,17,23,.96);box-shadow:0 10px 28px rgba(0,0,0,.38);text-align:center;transition:opacity .12s,transform .12s}
+.bar-tip strong{display:block;color:var(--text);font-size:16px;line-height:1}
+.bar-tip span{display:block;margin-top:3px;color:var(--muted);font-size:11px}
+.bar-tip:after{content:"";position:absolute;left:50%;bottom:-5px;width:9px;height:9px;background:rgba(13,17,23,.96);border-right:1px solid var(--border);border-bottom:1px solid var(--border);transform:translateX(-50%) rotate(45deg)}
+.bar-wrap:hover .bar-tip,.bar-wrap:focus-visible .bar-tip{opacity:1;transform:translate(-50%,-100%) translateY(0)}
 .rank-row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(48,54,61,.5);font-size:12px}
 .rank-row:last-child{border-bottom:none}
 .rank-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
@@ -98,7 +105,7 @@ fetch('/api/admin/stats').then(r=>r.json()).then(function(d){
   var max=Math.max(1,...d.analytics.series.map(function(x){return x.views;}));
   document.getElementById('traffic-chart').innerHTML=d.analytics.series.map(function(x){
     var h=Math.max(3,Math.round(x.views/max*160));
-    return '<div class="bar-wrap" title="'+x.date+': '+x.views+'"><div class="bar" style="height:'+h+'px"></div><div class="bar-lbl">'+x.date.slice(5)+'</div></div>';
+    return '<div class="bar-wrap" tabindex="0" aria-label="'+x.date+': '+x.views+'"><div class="bar-tip"><strong>'+x.views+'</strong><span>'+x.date+'</span></div><div class="bar" style="height:'+h+'px"></div><div class="bar-lbl">'+x.date.slice(5)+'</div></div>';
   }).join('');
   renderRank('top-docs',d.analytics.topDocs,'slug');
   renderRank('country-list',d.analytics.countries,'country');
