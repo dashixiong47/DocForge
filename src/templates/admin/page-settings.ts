@@ -9,10 +9,13 @@ export const settings = (s: Record<string,string>) => adminLayout({
 .ace_editor{font-family:"Cascadia Code","Consolas",monospace!important}
 .css-save-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--surface);border-top:1px solid var(--border)}
 .css-save-bar span{font-size:12px;color:var(--muted)}
-.site-icon-card{width:68px;height:68px;border:1px solid var(--border);border-radius:10px;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:800;color:var(--accent);cursor:pointer;transition:.14s;position:relative}
-.site-icon-card:hover{border-color:var(--accent);background:rgba(88,166,255,.06)}
-.site-icon-card img{width:100%;height:100%;object-fit:cover}
-.site-icon-card span{font-size:18px;line-height:1}
+.site-icon-slot{width:44px;height:44px;border:1px solid var(--border);border-radius:8px;background:var(--bg);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:800;color:var(--accent);cursor:pointer;transition:.14s;position:relative}
+.site-icon-slot:hover{border-color:var(--accent);background:rgba(88,166,255,.06);box-shadow:0 0 0 2px rgba(88,166,255,.1)}
+.site-icon-slot img{width:100%;height:100%;object-fit:cover}
+.site-icon-slot span{font-size:15px;line-height:1}
+.site-icon-slot.empty::before{content:'+';font-size:20px;font-weight:800;color:var(--accent)}
+.site-icon-field{display:flex;align-items:center;gap:9px}
+.site-icon-current{font-size:12px;color:var(--muted);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
 .icon-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px;max-height:340px;overflow:auto;padding:2px}
 .icon-pick-card{height:110px;border:1px solid var(--border);border-radius:8px;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;cursor:pointer;transition:.14s;color:var(--muted);overflow:hidden}
 .icon-pick-card:hover,.icon-pick-card.selected{border-color:var(--accent);background:rgba(88,166,255,.06);color:var(--text)}
@@ -22,7 +25,7 @@ export const settings = (s: Record<string,string>) => adminLayout({
 .icon-pick-name{max-width:100%;padding:0 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>`,
   body:`<h1 class="page-title" data-i18n="settings.title">⚙️ 系统设置</h1>
-<div class="card"><h3 data-i18n="settings.site">站点设置</h3><form id="sf2"><div class="form-row"><div class="form-group"><label data-i18n="settings.siteTitle">站点标题</label><input name="site_title" value="${esc(s.site_title||'DocForge')}" placeholder="DocForge"/></div><div class="form-group"><label data-i18n="settings.subtitle">副标题</label><input name="site_subtitle" value="${esc(s.site_subtitle||'Open documentation platform for projects and plugins.')}" placeholder="Open documentation platform for projects and plugins."/></div></div><div class="form-row"><div class="form-group"><label data-i18n="settings.logoText">顶部 Logo 文字</label><input name="header_logo_text" value="${esc(s.header_logo_text||'DocForge')}" placeholder="DocForge"/></div><div class="form-group"><label data-i18n="settings.siteIcon">站点图标</label><input name="site_icon" id="site-icon-input" type="hidden" value="${esc(s.site_icon||'DF')}"/><div class="site-icon-card" id="site-icon-preview" onclick="openIconPicker()" title="选择图标"></div><div style="font-size:11px;color:var(--muted);margin-top:6px" data-i18n="settings.siteIconHint">点击卡片更换，支持上传图片、媒体 URL、Emoji 或短文本</div></div><div class="form-group"><label data-i18n="settings.themeColor">主题色</label><input name="header_accent_color" type="color" value="${esc(s.header_accent_color||'#58a6ff')}" style="height:36px;width:80px"/></div></div><div class="form-group"><label data-i18n="settings.footer">页脚文字</label><input name="footer_text" value="${esc(s.footer_text||'')}"/></div><div class="form-group"><label data-i18n="settings.ga">Google Analytics ID</label><input name="ga_tracking_id" value="${esc(s.ga_tracking_id||'')}" placeholder="G-XXXXXXXXXX"/></div><button type="submit" class="btn btn-primary btn-sm" data-i18n="settings.save" style="margin-top:4px">保存</button></form></div>
+<div class="card"><h3 data-i18n="settings.site">站点设置</h3><form id="sf2"><div class="form-row"><div class="form-group"><label data-i18n="settings.siteTitle">站点标题</label><input name="site_title" value="${esc(s.site_title||'DocForge')}" placeholder="DocForge"/></div><div class="form-group"><label data-i18n="settings.subtitle">副标题</label><input name="site_subtitle" value="${esc(s.site_subtitle||'Open documentation platform for projects and plugins.')}" placeholder="Open documentation platform for projects and plugins."/></div></div><div class="form-row"><div class="form-group"><label data-i18n="settings.logoText">顶部 Logo 文字</label><input name="header_logo_text" value="${esc(s.header_logo_text||'DocForge')}" placeholder="DocForge"/></div><div class="form-group"><label data-i18n="settings.siteIcon">站点图标</label><input name="site_icon" id="site-icon-input" type="hidden" value="${esc(s.site_icon||'DF')}"/><div class="site-icon-field"><div class="site-icon-slot" id="site-icon-preview" onclick="openIconPicker()" title="选择图标"></div><div class="site-icon-current" id="site-icon-current"></div></div><div style="font-size:11px;color:var(--muted);margin-top:6px" data-i18n="settings.siteIconHint">点击占位图标更换，支持上传图片、媒体 URL、Emoji 或短文本</div></div><div class="form-group"><label data-i18n="settings.themeColor">主题色</label><input name="header_accent_color" type="color" value="${esc(s.header_accent_color||'#58a6ff')}" style="height:36px;width:80px"/></div></div><div class="form-group"><label data-i18n="settings.footer">页脚文字</label><input name="footer_text" value="${esc(s.footer_text||'')}"/></div><div class="form-group"><label data-i18n="settings.ga">Google Analytics ID</label><input name="ga_tracking_id" value="${esc(s.ga_tracking_id||'')}" placeholder="G-XXXXXXXXXX"/></div><button type="submit" class="btn btn-primary btn-sm" data-i18n="settings.save" style="margin-top:4px">保存</button></form></div>
 
 <div class="modal-ov" id="icon-picker-modal" style="z-index:3000">
   <div class="modal" onclick="event.stopPropagation()" style="width:680px;max-width:calc(100vw - 32px)">
@@ -52,11 +55,15 @@ export const settings = (s: Record<string,string>) => adminLayout({
 <script>
 function renderSiteIcon(v){
   var box=document.getElementById('site-icon-preview');
+  var label=document.getElementById('site-icon-current');
   v=String(v||'').trim()||'DF';
+  box.classList.remove('empty');
+  if(label)label.textContent=v;
   if(/^https?:\\/\\//i.test(v)||/^\\//.test(v)){
     box.innerHTML='<img src="'+v.replace(/"/g,'&quot;')+'" onerror="this.parentNode.innerHTML=\\'<span>DF</span>\\'">';
   }else{
-    box.innerHTML='<span>'+escHtml(v.slice(0,4))+'</span>';
+    box.innerHTML=v?'<span>'+escHtml(v.slice(0,4))+'</span>':'';
+    if(!v)box.classList.add('empty');
   }
 }
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}

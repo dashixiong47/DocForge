@@ -260,7 +260,7 @@ export const ADMIN_I18N: Record<string, { zh: string; en: string }> = {
   'settings.subtitle': { zh: '副标题', en: 'Subtitle' },
   'settings.logoText': { zh: '顶部 Logo 文字', en: 'Header Logo Text' },
   'settings.siteIcon': { zh: '站点图标', en: 'Site Icon' },
-  'settings.siteIconHint': { zh: '点击卡片更换，支持上传图片、媒体 URL、Emoji 或短文本', en: 'Click the card to change it. Supports image upload, media URL, emoji, or short text.' },
+  'settings.siteIconHint': { zh: '点击占位图标更换，支持上传图片、媒体 URL、Emoji 或短文本', en: 'Click the icon placeholder to change it. Supports image upload, media URL, emoji, or short text.' },
   'settings.selectIcon': { zh: '选择图标', en: 'Select Icon' },
   'settings.themeColor': { zh: '主题色', en: 'Theme Color' },
   'settings.footer': { zh: '页脚文字', en: 'Footer Text' },
