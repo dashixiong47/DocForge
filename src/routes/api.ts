@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { eq, asc, count, and, ne, like, notLike, sql } from 'drizzle-orm';
-import { analyticsEvents, plugins, sections, contentBlocks, media, siteSettings, admins, translations, extensions } from '../db/schema';
+import { analyticsEvents, plugins, sections, contentBlocks, media, siteSettings, admins, translations, extensions, extensionShareEvents } from '../db/schema';
 import { extensionManifest, validateManifest } from '../services/extensions';
 import { adminAuth } from '../services/auth';
 import type { AppType } from '../types';
@@ -63,6 +63,26 @@ async function deleteExtI18n(
 function extractI18nKeys(html: string): string[] {
   const matches = [...html.matchAll(/\{\{t:([^}]+)\}\}/g)];
   return [...new Set(matches.map(m => m[1].trim()))];
+}
+
+function originOf(c: { req: { url: string; header: (k: string) => string | undefined } }): string {
+  const u = new URL(c.req.url);
+  const proto = c.req.header('X-Forwarded-Proto') || u.protocol.replace(':', '');
+  const host = c.req.header('X-Forwarded-Host') || c.req.header('Host') || u.host;
+  return `${proto}://${host}`;
+}
+
+function clientIp(c: { req: { header: (k: string) => string | undefined } }): string {
+  return c.req.header('CF-Connecting-IP')
+    || (c.req.header('X-Forwarded-For') || '').split(',')[0].trim()
+    || c.req.header('X-Real-IP')
+    || '';
+}
+
+function ensureShareToken(row: { id: number; shareToken: string }): string {
+  if (row.shareToken) return row.shareToken;
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 const AI_BASE_URLS: Record<string, string> = {
@@ -775,6 +795,7 @@ apiRoutes.get('/admin/stats', async (c) => {
   const [pluginCount] = await db.select({ n: count() }).from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'))).all();
   const [sectionCount] = await db.select({ n: count() }).from(sections).all();
   const [mediaCount] = await db.select({ n: count() }).from(media).all();
+  const [extCount] = await db.select({ n: count() }).from(extensions).all();
   const since = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
   since.setHours(0, 0, 0, 0);
   const sinceIso = since.toISOString();
@@ -809,10 +830,32 @@ apiRoutes.get('/admin/stats', async (c) => {
     doc: e.pluginSlug,
     at: e.createdAt,
   }));
+  const shareEvents = await db.select({
+    extensionSlug: extensionShareEvents.extensionSlug,
+    installerOrigin: extensionShareEvents.installerOrigin,
+    country: extensionShareEvents.country,
+    createdAt: extensionShareEvents.createdAt,
+  }).from(extensionShareEvents).all();
+  const shareRecent = shareEvents.filter(e => e.createdAt >= sinceIso);
+  const shareMap: Record<string, number> = {};
+  for (const e of shareEvents) shareMap[e.extensionSlug] = (shareMap[e.extensionSlug] || 0) + 1;
+  const topShared = Object.entries(shareMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([slug, installs]) => ({ slug, installs }));
+  const recentInstalls = shareEvents.slice(-10).reverse().map(e => ({
+    slug: e.extensionSlug,
+    origin: e.installerOrigin || 'unknown',
+    country: e.country || 'Unknown',
+    at: e.createdAt,
+  }));
+  const shareStates = await db.select({
+    slug: extensions.slug,
+    name: extensions.name,
+    shareNotify: extensions.shareNotify,
+  }).from(extensions).orderBy(asc(extensions.slug)).all();
   return c.json({
     plugins: pluginCount?.n ?? 0,
     sections: sectionCount?.n ?? 0,
     media: mediaCount?.n ?? 0,
+    extensions: extCount?.n ?? 0,
     analytics: {
       views7d: events.length,
       visitors7d: ipSet.size,
@@ -820,6 +863,13 @@ apiRoutes.get('/admin/stats', async (c) => {
       topDocs,
       countries,
       recentIps,
+    },
+    shares: {
+      installs7d: shareRecent.length,
+      installsTotal: shareEvents.length,
+      topShared,
+      recentInstalls,
+      states: shareStates.map(s => ({ slug: s.slug, name: s.name, shareNotify: s.shareNotify ? 1 : 0 })),
     },
   });
 });
@@ -881,12 +931,49 @@ apiRoutes.get('/extensions/:slug/manifest.json', async (c) => {
   try {
     const { loadExtensionById } = await import('../services/extensions');
     const ext = await loadExtensionById(db, row.id);
-    manifest = ext ? extensionManifest(ext) : {};
+    if (ext) {
+      const base = originOf(c);
+      manifest = extensionManifest(ext, ext.shareToken ? {
+        token: ext.shareToken,
+        notifyUrl: `${base}/api/extensions/share-install`,
+        installUrl: `${base}/admin/extensions?install=${encodeURIComponent(`${base}/api/extensions/${slug}/manifest.json`)}`,
+        enabled: !!ext.shareNotify,
+      } : undefined);
+    }
   } catch {
     manifest = {};
   }
   c.header('Cache-Control', 'no-store');
   return c.json(manifest);
+});
+
+apiRoutes.post('/extensions/share-install', async (c) => {
+  const db = c.get('db');
+  const body: { token?: string; slug?: string; sourceUrl?: string; installerOrigin?: string } =
+    await c.req.json<{ token?: string; slug?: string; sourceUrl?: string; installerOrigin?: string }>().catch(() => ({}));
+  const token = String(body.token || '').trim();
+  if (!/^[a-f0-9]{32}$/.test(token)) return c.json({ ok: false, error: 'Invalid token' }, 400);
+  const row = await db.select({
+    id: extensions.id,
+    slug: extensions.slug,
+    shareNotify: extensions.shareNotify,
+  }).from(extensions).where(eq(extensions.shareToken, token)).get();
+  if (!row) return c.json({ ok: false, error: 'Unknown share token' }, 404);
+  if (!row.shareNotify) return c.json({ ok: true, disabled: true });
+  const now = new Date().toISOString();
+  await db.insert(extensionShareEvents).values({
+    extensionId: row.id,
+    extensionSlug: row.slug,
+    token,
+    eventType: 'install',
+    sourceUrl: String(body.sourceUrl || ''),
+    installerOrigin: String(body.installerOrigin || ''),
+    installerUserAgent: c.req.header('User-Agent') || '',
+    ip: clientIp(c),
+    country: c.req.header('CF-IPCountry') || '',
+    createdAt: now,
+  }).run();
+  return c.json({ ok: true });
 });
 
 // Fetch manifest JSON from a URL (server-side, avoids CORS issues)
@@ -920,8 +1007,41 @@ apiRoutes.get('/admin/extensions/:id/manifest', async (c) => {
     i18nStrings: JSON.parse(row.i18n || '{}'),
     configSchema: JSON.parse(row.configSchema || '{}'),
     config: JSON.parse(row.config || '{}'),
+    shareToken: row.shareToken || '',
+    shareNotify: row.shareNotify ?? 1,
   };
   return c.json(extensionManifest(ext));
+});
+
+apiRoutes.get('/admin/extensions/:id/share', async (c) => {
+  const db = c.get('db');
+  const id = Number(c.req.param('id'));
+  const row = await db.select({
+    id: extensions.id,
+    slug: extensions.slug,
+    shareToken: extensions.shareToken,
+    shareNotify: extensions.shareNotify,
+  }).from(extensions).where(eq(extensions.id, id)).get();
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  const token = ensureShareToken(row);
+  if (token !== row.shareToken) {
+    await db.update(extensions).set({ shareToken: token, updatedAt: new Date().toISOString() }).where(eq(extensions.id, id)).run();
+  }
+  const base = originOf(c);
+  const manifestUrl = `${base}/api/extensions/${row.slug}/manifest.json`;
+  const installUrl = `${base}/admin/extensions?install=${encodeURIComponent(manifestUrl)}`;
+  const notifyUrl = `${base}/api/extensions/share-install`;
+  return c.json({ ok: true, installUrl, manifestUrl, notifyUrl, token, shareNotify: row.shareNotify ? 1 : 0 });
+});
+
+apiRoutes.put('/admin/extensions/:id/share-notify', async (c) => {
+  const db = c.get('db');
+  const id = Number(c.req.param('id'));
+  const row = await db.select({ shareNotify: extensions.shareNotify }).from(extensions).where(eq(extensions.id, id)).get();
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  const next = row.shareNotify ? 0 : 1;
+  await db.update(extensions).set({ shareNotify: next, updatedAt: new Date().toISOString() }).where(eq(extensions.id, id)).run();
+  return c.json({ ok: true, shareNotify: next });
 });
 
 apiRoutes.post('/admin/extensions/check-updates', async (c) => {
@@ -992,6 +1112,10 @@ apiRoutes.post('/admin/extensions', async (c) => {
   const db = c.get('db');
   const body = await c.req.json();
   const sourceUrl = typeof body.__sourceUrl === 'string' ? body.__sourceUrl : '';
+  const share = typeof body.share === 'object' && body.share ? body.share as Record<string, unknown> : {};
+  const shareNotifyUrl = typeof share.notifyUrl === 'string' ? share.notifyUrl : '';
+  const shareToken = typeof share.token === 'string' ? share.token : '';
+  const shareInstallUrl = typeof share.installUrl === 'string' ? share.installUrl : '';
   const result = validateManifest(body);
   if (!result.ok) return c.json({ error: result.error }, 400);
   const m = result.manifest;
@@ -1014,12 +1138,30 @@ apiRoutes.post('/admin/extensions', async (c) => {
     tags:         JSON.stringify(m.tags         ?? []),
     i18n:         JSON.stringify(m.i18nStrings  ?? {}),
     configSchema: JSON.stringify(m.configSchema ?? {}),
-    config:       JSON.stringify({ ...(m.config ?? {}), ...(sourceUrl ? { __sourceUrl: sourceUrl } : {}) }),
+    config:       JSON.stringify({
+      ...(m.config ?? {}),
+      ...(sourceUrl ? { __sourceUrl: sourceUrl } : {}),
+      ...(shareNotifyUrl && shareToken ? { __shareNotifyUrl: shareNotifyUrl, __shareToken: shareToken, __shareInstallUrl: shareInstallUrl } : {}),
+    }),
     createdAt: now, updatedAt: now,
   }).returning().get();
   // Sync i18n strings to translations table so they appear in /admin/translations
   if (m.i18nStrings && Object.keys(m.i18nStrings).length > 0) {
     await syncExtI18n(db, m.slug!, m.i18nStrings);
+  }
+  if (shareNotifyUrl && shareToken) {
+    c.executionCtx.waitUntil(
+      fetch(shareNotifyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: shareToken,
+          slug: m.slug,
+          sourceUrl,
+          installerOrigin: originOf(c),
+        }),
+      }).catch(() => undefined)
+    );
   }
   return c.json({ ok: true, id: row.id });
 });

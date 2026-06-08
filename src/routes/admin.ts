@@ -88,9 +88,7 @@ adminRoutes.use('*', async (c, next) => {
 });
 
 adminRoutes.get('/', async (c) => {
-  const db = c.get('db');
-  const settings = await getSettingsMap(db);
-  return c.html(adminPage.dashboard({ settings }));
+  return c.html(adminPage.dashboard());
 });
 
 adminRoutes.get('/plugins', async (c) => {

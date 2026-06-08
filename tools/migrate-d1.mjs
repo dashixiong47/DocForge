@@ -59,6 +59,7 @@ const existingSchemaChecks = {
   '0011_plugins_compatibility_column.sql': "SELECT name FROM pragma_table_info('plugins') WHERE name='compatibility';",
   '0012_extension_html_templates.sql': "SELECT name FROM pragma_table_info('extensions') WHERE name='html';",
   '0013_plugin_listed.sql': "SELECT name FROM pragma_table_info('plugins') WHERE name='listed';",
+  '0014_extension_share_events.sql': "SELECT name FROM sqlite_master WHERE type='table' AND name='extension_share_events';",
 };
 
 runSql(

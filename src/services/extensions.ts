@@ -25,12 +25,17 @@ export interface Extension {
   i18nStrings: Record<string, Record<string, string>>;
   configSchema: object;
   config: object;
+  shareToken: string;
+  shareNotify: number;
   createdAt: string;
   updatedAt: string;
 }
 
-export function extensionManifest(ext: Extension): Record<string, unknown> {
-  return {
+export function extensionManifest(
+  ext: Extension,
+  share?: { token: string; notifyUrl: string; installUrl?: string; enabled?: boolean }
+): Record<string, unknown> {
+  const manifest: Record<string, unknown> = {
     slug: ext.slug,
     name: ext.name,
     description: ext.description,
@@ -49,6 +54,16 @@ export function extensionManifest(ext: Extension): Record<string, unknown> {
     configSchema: ext.configSchema,
     config: ext.config,
   };
+  if (share) {
+    manifest.share = {
+      protocol: 'docforge-extension-share-v1',
+      token: share.token,
+      notifyUrl: share.notifyUrl,
+      installUrl: share.installUrl || '',
+      notifyEnabled: share.enabled !== false,
+    };
+  }
+  return manifest;
 }
 
 function parseExt(row: typeof extensions.$inferSelect): Extension {
@@ -60,6 +75,8 @@ function parseExt(row: typeof extensions.$inferSelect): Extension {
     i18nStrings:  JSON.parse(row.i18n         || '{}'),
     configSchema: JSON.parse(row.configSchema || '{}'),
     config:       JSON.parse(row.config       || '{}'),
+    shareToken:    row.shareToken || '',
+    shareNotify:   row.shareNotify ?? 1,
   };
 }
 

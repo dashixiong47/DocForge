@@ -95,9 +95,28 @@ export const extensions = sqliteTable('extensions', {
   i18n:         text('i18n').notNull().default('{}'),
   configSchema: text('config_schema').notNull().default('{}'),
   config:       text('config').notNull().default('{}'),
+  shareToken:   text('share_token').notNull().default(''),
+  shareNotify:  integer('share_notify').notNull().default(1),
   createdAt:    text('created_at').notNull(),
   updatedAt:    text('updated_at').notNull(),
 });
+
+export const extensionShareEvents = sqliteTable('extension_share_events', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  extensionId: integer('extension_id').notNull().references(() => extensions.id, { onDelete: 'cascade' }),
+  extensionSlug: text('extension_slug').notNull(),
+  token: text('token').notNull(),
+  eventType: text('event_type').notNull().default('install'),
+  sourceUrl: text('source_url').notNull().default(''),
+  installerOrigin: text('installer_origin').notNull().default(''),
+  installerUserAgent: text('installer_user_agent').notNull().default(''),
+  ip: text('ip').notNull().default(''),
+  country: text('country').notNull().default(''),
+  createdAt: text('created_at').notNull(),
+}, (t) => ({
+  tokenIdx: index('idx_extension_share_events_token').on(t.token, t.createdAt),
+  extensionIdx: index('idx_extension_share_events_extension').on(t.extensionId, t.createdAt),
+}));
 
 export const translations = sqliteTable('translations', {
   id: integer('id').primaryKey({ autoIncrement: true }),

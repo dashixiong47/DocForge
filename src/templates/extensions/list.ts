@@ -124,6 +124,11 @@ export function extensionsList(exts: Extension[], lang = 'zh'): string {
 .ext-actions{display:flex;gap:6px;align-items:center;border-top:1px solid var(--border);padding-top:10px;margin-top:auto;min-width:0}
 .ext-state{font-size:12px;color:var(--muted);flex:1 0 auto;min-width:max-content;white-space:nowrap}
 .ext-actions .btn{flex-shrink:0;white-space:nowrap}
+.share-mini{display:flex;align-items:center;gap:6px;border-top:1px solid rgba(48,54,61,.55);padding-top:9px}
+.share-mini-label{font-size:12px;color:var(--muted)}
+.share-mini .toggle{width:30px;height:16px}
+.share-mini .toggle-slider::before{width:10px;height:10px;left:3px;bottom:3px}
+.share-mini .toggle input:checked+.toggle-slider::before{transform:translateX(14px)}
 .toggle{position:relative;width:36px;height:20px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0}
 .toggle-slider{position:absolute;inset:0;background:#30363d;border-radius:20px;cursor:pointer;transition:.2s}
@@ -212,6 +217,13 @@ ${exts.length === 0 ? `
         ${displayTags.map(t => `<span class="chip chip-tag">#${esc(t)}</span>`).join('')}
       </div>` : ''}
       <div class="ext-update" id="ext-update-${ext.id}" style="display:none;font-size:12px;color:var(--warn);border:1px solid rgba(210,153,29,.25);background:rgba(210,153,29,.08);border-radius:6px;padding:7px 9px"></div>
+      <div class="share-mini">
+        <label class="toggle" data-i18n-title="ext.shareNotifyToggle" title="允许安装回传">
+          <input type="checkbox" ${ext.shareNotify ? 'checked' : ''} onchange="toggleShareNotify(${ext.id},this)">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="share-mini-label" data-i18n="ext.shareNotify">安装回传</span>
+      </div>
       <div class="ext-actions">
         <label class="toggle">
           <input type="checkbox" ${ext.enabled ? 'checked' : ''} onchange="toggleExt(${ext.id},this)">
@@ -436,11 +448,18 @@ function applyExtCardsI18n(){
 }
 applyExtCardsI18n();
 async function shareExt(id,slug){
-  var url=new URL('/api/extensions/'+slug+'/manifest.json', location.origin).href;
-  var install=new URL('/admin/extensions', location.origin).href + '?install=' + encodeURIComponent(url);
-  var text=install;
+  var r=await fetch('/api/admin/extensions/'+id+'/share');
+  var d=await r.json();
+  if(!d.ok){alert(t('ext.shareFailed')+': '+(d.error||''));return;}
+  var text=d.installUrl;
   try{await navigator.clipboard.writeText(text);alert(t('ext.shareCopied')+'\\n'+text);}
   catch(e){prompt(t('ext.shareLink'),text);}
+}
+async function toggleShareNotify(id,cb){
+  var r=await fetch('/api/admin/extensions/'+id+'/share-notify',{method:'PUT'});
+  var d=await r.json();
+  if(d.ok){cb.checked=!!d.shareNotify;}
+  else{cb.checked=!cb.checked;alert(t('ext.operationFailed')+': '+(d.error||''));}
 }
 async function downloadExt(id,slug){
   try{
