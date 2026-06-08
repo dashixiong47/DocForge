@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -11,9 +12,11 @@ if (!existsSync(inputPath)) {
   process.exit(1);
 }
 
+const originalText = readFileSync(inputPath, 'utf8');
+const parsedLines = originalText.split(/\r?\n/);
 const secrets = {};
 
-for (const rawLine of readFileSync(inputPath, 'utf8').split(/\r?\n/)) {
+for (const rawLine of parsedLines) {
   const line = rawLine.trim();
   if (!line || line.startsWith('#')) continue;
 
@@ -34,9 +37,26 @@ for (const rawLine of readFileSync(inputPath, 'utf8').split(/\r?\n/)) {
   secrets[key] = value;
 }
 
-if (!Object.keys(secrets).length) {
-  console.error('No non-empty variables found in .dev.vars.');
+function setDevVar(key, value) {
+  let found = false;
+  const next = parsedLines.map((line) => {
+    if (!line.trim().startsWith(`${key}=`)) return line;
+    found = true;
+    return `${key}=${value}`;
+  });
+  if (!found) next.push(`${key}=${value}`);
+  writeFileSync(inputPath, next.join('\n').replace(/\n*$/, '\n'));
+}
+
+if (!secrets.ADMIN_USERNAME || !secrets.ADMIN_PASSWORD) {
+  console.error('ADMIN_USERNAME and ADMIN_PASSWORD are required in .dev.vars.');
   process.exit(1);
+}
+
+if (!secrets.JWT_SECRET || secrets.JWT_SECRET === 'local-dev-secret-change-me' || secrets.JWT_SECRET === 'change-me-in-production') {
+  secrets.JWT_SECRET = randomBytes(48).toString('hex');
+  setDevVar('JWT_SECRET', secrets.JWT_SECRET);
+  console.log('Generated JWT_SECRET and wrote it back to .dev.vars.');
 }
 
 mkdirSync(dirname(outputPath), { recursive: true });

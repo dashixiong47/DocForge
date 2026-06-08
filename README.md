@@ -46,7 +46,7 @@ Create local deploy variables:
 Copy-Item .dev.vars.example .dev.vars
 ```
 
-Edit `.dev.vars`, especially `ADMIN_PASSWORD` and `JWT_SECRET`, then deploy:
+Edit `.dev.vars` and set your own `ADMIN_USERNAME` and `ADMIN_PASSWORD`. Leave `JWT_SECRET` empty if you want it generated automatically. Then deploy:
 
 ```bash
 npm install
@@ -77,7 +77,7 @@ npm run dev
 
 Open `http://127.0.0.1:8787/admin`.
 
-Default committed credentials are `admin` / `admin123`. Change local credentials in `.dev.vars`; this file is ignored by git.
+Set local credentials in `.dev.vars`; this file is ignored by git. `JWT_SECRET` is generated automatically by `npm run secrets:push` when it is empty.
 
 ---
 
@@ -87,28 +87,25 @@ DocForge keeps public configuration and private values separate:
 
 | File / place | Git status | Purpose |
 | --- | --- | --- |
-| `wrangler.toml` | ✅ committed | Safe defaults, bindings, resource names. |
+| `wrangler.toml` | ✅ committed | Public defaults, bindings, resource names. No credentials. |
 | `.dev.vars.example` | ✅ committed | Local variable template. |
 | `.dev.vars` | 🚫 ignored | Local credentials and values pushed to Cloudflare Secrets. |
 | Cloudflare Secrets | outside git | Deployment-time private values. |
 
-Safe defaults in `wrangler.toml`:
+Public defaults in `wrangler.toml`:
 
 ```toml
 [vars]
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"
-JWT_SECRET = "change-me-in-production"
 SITE_TITLE = "DocForge"
 SITE_DOMAIN = ""
 ```
 
-Private values belong in `.dev.vars`:
+Private values belong in `.dev.vars`. `JWT_SECRET` can be left blank; `npm run secrets:push` will generate a strong value and write it back to `.dev.vars`.
 
 ```ini
 ADMIN_USERNAME=my-admin
 ADMIN_PASSWORD=my-strong-password
-JWT_SECRET=my-random-jwt-secret
+JWT_SECRET=
 SITE_TITLE=DocForge
 SITE_DOMAIN=https://example.com
 AI_TRANSLATE_API_KEY=sk-...
@@ -120,7 +117,8 @@ Update deployed secrets:
 # First time only:
 cp .dev.vars.example .dev.vars
 
-# Edit .dev.vars locally, then push secrets:
+# Edit ADMIN_USERNAME / ADMIN_PASSWORD locally, then push secrets.
+# JWT_SECRET is generated automatically when empty:
 npm run secrets:push
 ```
 

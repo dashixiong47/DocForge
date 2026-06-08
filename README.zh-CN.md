@@ -46,7 +46,7 @@ npx wrangler r2 bucket create docforge-media
 Copy-Item .dev.vars.example .dev.vars
 ```
 
-编辑 `.dev.vars`，至少改掉 `ADMIN_PASSWORD` 和 `JWT_SECRET`，然后部署：
+编辑 `.dev.vars`，设置你自己的 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD`。`JWT_SECRET` 可以留空，部署前会自动生成。然后部署：
 
 ```bash
 npm install
@@ -77,7 +77,7 @@ npm run dev
 
 访问 `http://127.0.0.1:8787/admin`。
 
-仓库默认账号是 `admin` / `admin123`。本地请在 `.dev.vars` 修改自己的账号密码；该文件不会上传 git。
+本地账号密码写在 `.dev.vars`；该文件不会上传 git。`JWT_SECRET` 留空时会在执行 `npm run secrets:push` 时自动生成。
 
 ---
 
@@ -87,28 +87,25 @@ DocForge 把可提交配置和私有值分开：
 
 | 文件 / 位置 | Git 状态 | 用途 |
 | --- | --- | --- |
-| `wrangler.toml` | ✅ 提交 | 安全默认值、绑定和资源名称。 |
+| `wrangler.toml` | ✅ 提交 | 公开默认值、绑定和资源名称。不包含账号密码。 |
 | `.dev.vars.example` | ✅ 提交 | 本地变量模板。 |
 | `.dev.vars` | 🚫 忽略 | 本地账号密码，以及要推送到 Cloudflare Secrets 的私有值。 |
 | Cloudflare Secrets | 仓库外 | 部署时读取的私有变量。 |
 
-`wrangler.toml` 里的安全默认值：
+`wrangler.toml` 里的公开默认值：
 
 ```toml
 [vars]
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"
-JWT_SECRET = "change-me-in-production"
 SITE_TITLE = "DocForge"
 SITE_DOMAIN = ""
 ```
 
-私有值写在 `.dev.vars`：
+私有值写在 `.dev.vars`。`JWT_SECRET` 可以留空，`npm run secrets:push` 会自动生成强随机值并写回 `.dev.vars`。
 
 ```ini
 ADMIN_USERNAME=my-admin
 ADMIN_PASSWORD=my-strong-password
-JWT_SECRET=my-random-jwt-secret
+JWT_SECRET=
 SITE_TITLE=DocForge
 SITE_DOMAIN=https://example.com
 AI_TRANSLATE_API_KEY=sk-...
@@ -120,7 +117,8 @@ AI_TRANSLATE_API_KEY=sk-...
 # 只在第一次需要：
 cp .dev.vars.example .dev.vars
 
-# 本地改完 .dev.vars 后推送：
+# 本地设置 ADMIN_USERNAME / ADMIN_PASSWORD 后推送。
+# JWT_SECRET 为空时会自动生成：
 npm run secrets:push
 ```
 

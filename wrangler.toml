@@ -16,12 +16,9 @@ database_id = "local-dev"
 binding = "MEDIA"
 bucket_name = "docforge-media"
 
-# 默认变量（会被根目录 .dev.vars 覆盖用于本地开发）
-# 生产环境请用: wrangler secret put ADMIN_PASSWORD
+# Public, non-sensitive defaults. Credentials and JWT_SECRET must be provided
+# through .dev.vars locally and Cloudflare Secrets in production.
 [vars]
-JWT_SECRET = "change-me-in-production"
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"
 SITE_TITLE = "DocForge"
 SITE_DOMAIN = ""
 

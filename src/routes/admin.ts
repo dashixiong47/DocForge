@@ -126,9 +126,15 @@ adminRoutes.post('/login', async (c) => {
   if (dbAdmin) {
     authenticated = await adminAuth.verifyPassword(password, dbAdmin.passwordHash);
   } else {
-    authenticated = username === c.env.ADMIN_USERNAME && password === c.env.ADMIN_PASSWORD;
+    authenticated = !!c.env.ADMIN_USERNAME
+      && !!c.env.ADMIN_PASSWORD
+      && username === c.env.ADMIN_USERNAME
+      && password === c.env.ADMIN_PASSWORD;
   }
   if (authenticated) {
+    if (!c.env.JWT_SECRET) {
+      return c.html(adminPage.login('JWT_SECRET 未配置'));
+    }
     const token = await adminAuth.signToken(username, c.env.JWT_SECRET);
     c.header('Set-Cookie', `admin_token=${token}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`);
     return c.redirect('/admin');

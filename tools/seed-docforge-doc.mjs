@@ -3,9 +3,23 @@
  * Seed the DocForge project's own documentation.
  */
 
+const fs = require('node:fs');
+
+function readDevVar(key) {
+  if (!fs.existsSync('.dev.vars')) return '';
+  const line = fs.readFileSync('.dev.vars', 'utf8')
+    .split(/\r?\n/)
+    .find((item) => item.trim().startsWith(`${key}=`));
+  return line ? line.slice(line.indexOf('=') + 1).trim() : '';
+}
+
 const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8787';
-const USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+const USERNAME = process.env.ADMIN_USERNAME || readDevVar('ADMIN_USERNAME');
+const PASSWORD = process.env.ADMIN_PASSWORD || readDevVar('ADMIN_PASSWORD');
+
+if (!USERNAME || !PASSWORD) {
+  throw new Error('ADMIN_USERNAME and ADMIN_PASSWORD are required via environment or .dev.vars');
+}
 
 let cookieJar = '';
 
