@@ -259,6 +259,8 @@ export const ADMIN_I18N: Record<string, { zh: string; en: string }> = {
   'settings.siteTitle': { zh: '站点标题', en: 'Site Title' },
   'settings.subtitle': { zh: '副标题', en: 'Subtitle' },
   'settings.logoText': { zh: '顶部 Logo 文字', en: 'Header Logo Text' },
+  'settings.siteIcon': { zh: '站点图标', en: 'Site Icon' },
+  'settings.siteIconHint': { zh: '支持 Emoji、短文本或图片 URL，前台会用作 favicon', en: 'Supports emoji, short text, or an image URL. Public pages use it as the favicon.' },
   'settings.themeColor': { zh: '主题色', en: 'Theme Color' },
   'settings.footer': { zh: '页脚文字', en: 'Footer Text' },
   'settings.ga': { zh: 'Google Analytics ID', en: 'Google Analytics ID' },

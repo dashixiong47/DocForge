@@ -709,9 +709,7 @@ export function home(params: {
   return `<!doctype html><html lang="${htmlLang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(settings.site_title || 'DocForge')}</title>
-<link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" type="image/png" href="/favicon.png">
-<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+${faviconLink(settings.site_icon || '')}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
 ${settings.custom_css ? `<style>${settings.custom_css}</style>` : docThemeCSS()}
 ${extHeadHtml}
