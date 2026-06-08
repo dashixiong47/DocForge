@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const root = process.cwd();
 const inputPath = resolve(root, '.dev.vars');
-const outputPath = resolve(root, '.wrangler', 'dev-vars-secrets.json');
+const wranglerBin = resolve(root, 'node_modules', 'wrangler', 'bin', 'wrangler.js');
 
 if (!existsSync(inputPath)) {
   console.error('Missing .dev.vars. Create it first: Copy-Item .dev.vars.example .dev.vars');
@@ -59,15 +59,18 @@ if (!secrets.JWT_SECRET || secrets.JWT_SECRET === 'local-dev-secret-change-me' |
   console.log('Generated JWT_SECRET and wrote it back to .dev.vars.');
 }
 
-mkdirSync(dirname(outputPath), { recursive: true });
-writeFileSync(outputPath, JSON.stringify(secrets, null, 2));
-
 console.log(`Uploading ${Object.keys(secrets).length} variables from .dev.vars to Cloudflare Secrets...`);
 
-const result = spawnSync('npx', ['wrangler', 'secret', 'bulk', outputPath], {
-  cwd: root,
-  shell: true,
-  stdio: 'inherit',
-});
+for (const [key, value] of Object.entries(secrets)) {
+  console.log(`Uploading ${key}...`);
+  const result = spawnSync(process.execPath, [wranglerBin, 'secret', 'put', key], {
+    cwd: root,
+    input: `${value}\n`,
+    shell: false,
+    stdio: ['pipe', 'inherit', 'inherit'],
+  });
 
-process.exit(result.status ?? 1);
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
