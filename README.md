@@ -1,24 +1,39 @@
-# DocForge
+<div align="center">
 
-Lightweight documentation CMS with admin editing, published docs, media placeholders, i18n translations, plugin sharing, and visit analytics. Built on Cloudflare Workers, D1, and R2.
+# ⚒️ DocForge
 
-[中文文档](./README.zh-CN.md)
+**Open documentation CMS for plugins, projects, and product docs.**  
+Admin editing, i18n, media, plugins, analytics, and Cloudflare-native deployment in one small Worker app.
+
+[简体中文](./README.zh-CN.md)
+
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)
+![D1](https://img.shields.io/badge/D1-SQLite-2F81F7?style=for-the-badge)
+![R2](https://img.shields.io/badge/R2-Media-22C55E?style=for-the-badge)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
+![Hono](https://img.shields.io/badge/Hono-Router-E36002?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-8B5CF6?style=for-the-badge)
+
+</div>
 
 ---
 
-## Features
+## ✨ Why DocForge?
 
-- **Editor-first workflow**: manage docs, sections, HTML/CSS/JS, translations, and media from one admin UI.
-- **Multilingual by design**: document content, system UI, and plugin strings share the same translation workflow.
-- **Media-friendly docs**: media keys resolve to normal URLs, so authors can use plain `<img>` / `<video>` tags or richer media components.
-- **Extensible runtime**: plugins can add optional HTML templates, custom tags, CSS, JS, and reusable documentation widgets.
-- **Cloudflare-native deployment**: runs on Workers with D1 for data and R2 for media, without a separate server to maintain.
+| Area | What you get |
+| --- | --- |
+| 🧩 **Plugin docs** | Manage multiple docs by slug, icon, version, compatibility, tags, visibility, custom CSS, and custom JS. |
+| 🌍 **Localization first** | Document content, site UI, and plugin runtime strings share one translation workflow. |
+| 🖼️ **Media-native writing** | Use plain `<img src="{{img:key}}">` / `<video src="{{video:key}}">`, or install richer media components. |
+| 🧱 **Plugin runtime** | Add optional HTML templates, custom tags, CSS, JS, config, and reusable documentation widgets. |
+| ☁️ **Cloudflare-native** | Workers for runtime, D1 for content, R2 for media. No separate server to maintain. |
+| 📊 **Built-in analytics** | Visit events are stored in D1 for lightweight dashboard metrics and plugin ecosystem feedback. |
 
 ---
 
-## One-Command Deploy
+## 🚀 Quick Deploy
 
-Create Cloudflare resources first, then update `database_id` in `wrangler.toml` with the real D1 database ID:
+Create Cloudflare resources first, then copy the real D1 `database_id` into `wrangler.toml`:
 
 ```bash
 npx wrangler d1 create docforge-db
@@ -31,14 +46,14 @@ Create local deploy variables:
 Copy-Item .dev.vars.example .dev.vars
 ```
 
-Edit `.dev.vars`, especially `ADMIN_PASSWORD` and `JWT_SECRET`. Then sync variables, run remote migrations, and deploy:
+Edit `.dev.vars`, especially `ADMIN_PASSWORD` and `JWT_SECRET`, then deploy:
 
 ```bash
 npm install
 npm run deploy:local
 ```
 
-`deploy:local` runs:
+`deploy:local` runs the production sequence:
 
 ```bash
 npm run secrets:push
@@ -48,7 +63,7 @@ wrangler deploy
 
 ---
 
-## Local Development
+## 🧑‍💻 Local Development
 
 ```powershell
 Copy-Item .dev.vars.example .dev.vars
@@ -60,22 +75,24 @@ npm run db:init
 npm run dev
 ```
 
-Open http://127.0.0.1:8787/admin.
+Open `http://127.0.0.1:8787/admin`.
 
-Committed defaults are `admin` / `admin123`. Change your local credentials in `.dev.vars`; that file is ignored by git.
+Default committed credentials are `admin` / `admin123`. Change local credentials in `.dev.vars`; this file is ignored by git.
 
 ---
 
-## Variables and Secrets
+## 🔐 Variables & Secrets
 
-This repository keeps deployable configuration and private values separate:
+DocForge keeps public configuration and private values separate:
 
-- `wrangler.toml` is committed and should only contain safe defaults, bindings, and resource names.
-- `.dev.vars.example` is committed as a template.
-- `.dev.vars` is local only. Use it for development values and Cloudflare Secret values.
-- Cloudflare Secrets are deployment state. They are pushed with `npm run secrets:push`; they are not stored in git.
+| File / place | Git status | Purpose |
+| --- | --- | --- |
+| `wrangler.toml` | ✅ committed | Safe defaults, bindings, resource names. |
+| `.dev.vars.example` | ✅ committed | Local variable template. |
+| `.dev.vars` | 🚫 ignored | Local credentials and values pushed to Cloudflare Secrets. |
+| Cloudflare Secrets | outside git | Deployment-time private values. |
 
-Committed defaults live in `wrangler.toml`:
+Safe defaults in `wrangler.toml`:
 
 ```toml
 [vars]
@@ -86,7 +103,7 @@ SITE_TITLE = "DocForge"
 SITE_DOMAIN = ""
 ```
 
-Create `.dev.vars` from the example and keep private values there:
+Private values belong in `.dev.vars`:
 
 ```ini
 ADMIN_USERNAME=my-admin
@@ -103,48 +120,59 @@ Update deployed secrets:
 # First time only:
 cp .dev.vars.example .dev.vars
 
-# Edit .dev.vars locally, then push secret values to Cloudflare:
+# Edit .dev.vars locally, then push secrets:
 npm run secrets:push
 ```
 
-If only secret values changed, `secrets:push` is enough. Run `npm run deploy` again when code, migrations, bindings, or non-secret Worker configuration changed:
-
-```bash
-npm run deploy
-```
+Run `npm run deploy` again when code, migrations, bindings, or non-secret Worker configuration changed.
 
 Ignored local files and folders:
 
-- `.dev.vars`
-- `.env`
-- `.env.local`
-- `.wrangler/`
-- `PrivatePlugins/`
-- `scripts/`
+```text
+.dev.vars
+.env
+.env.local
+.wrangler/
+PrivatePlugins/
+scripts/
+```
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
-- **Cloudflare Worker**: Hono application entry for admin pages, public docs, API routes, and media access.
-- **D1**: stores docs, sections, content blocks, translations, plugins, settings, admins, and analytics.
-- **R2**: stores uploaded images, videos, GIFs, WebP files, and other media.
-- **SSR Templates**: admin and public pages are rendered from TypeScript templates.
-- **Plugin Runtime**: plugins can provide optional HTML templates, CSS, JS, custom tags, and custom renderers.
-- **i18n System**: system UI, document content, and plugin strings are stored in translations and can use batch or AI translation.
+```text
+Browser / Admin
+      │
+      ▼
+Cloudflare Worker  ── Hono routes: admin, docs, api, media
+      │
+      ├── D1  ─────── docs, sections, blocks, translations, plugins, settings, analytics
+      ├── R2  ─────── uploaded media assets
+      └── SSR ─────── TypeScript templates for public docs and admin pages
+```
+
+| Layer | Role |
+| --- | --- |
+| ⚡ **Worker** | Hono app entry for admin pages, public docs, APIs, and media access. |
+| 🗃️ **D1** | Stores docs, sections, content blocks, translations, plugins, settings, admins, and analytics. |
+| 🖼️ **R2** | Stores uploaded images, videos, GIFs, WebP files, and other media. |
+| 🧾 **SSR Templates** | Public and admin pages are rendered from TypeScript templates. |
+| 🧩 **Plugin Runtime** | Plugins can inject HTML templates, CSS, JS, custom tags, and custom renderers. |
+| 🌍 **i18n System** | System UI, document content, and plugin strings live in translation rows. |
 
 ---
 
-## Media Usage
+## 🖼️ Media Usage
 
-`{{img:key}}` and `{{video:key}}` are URL tokens. Use them inside normal HTML when you want full control over attributes and styling:
+`{{img:key}}` and `{{video:key}}` are URL tokens. Use them inside normal HTML when you want full control:
 
 ```html
 <img src="{{img:hero-screenshot}}" alt="" loading="lazy" />
 <video src="{{video:demo-clip}}" controls></video>
 ```
 
-For richer presentation, install a media plugin and use component tags:
+Install a media plugin when you want richer presentation:
 
 ```html
 <media-image key="hero-screenshot" fit="cover" caption="Main UI" lightbox="true"></media-image>
@@ -152,21 +180,22 @@ For richer presentation, install a media plugin and use component tags:
 <media-video key="demo-clip" poster="video-poster" controls="true"></media-video>
 ```
 
-The component layer is optional; plain `<img>` and `<video>` remain supported.
+The component layer is optional. Plain `<img>` and `<video>` remain supported.
 
 ---
 
-## Plugin Usage
+## 🔌 Plugin System
 
-Plugins are runtime add-ons stored in the `extensions` table. They can provide optional HTML templates, CSS, JS, custom tags, config, and their own i18n strings.
+Plugins are runtime add-ons stored in the `extensions` table. A plugin can be CSS-only, JS-only, or use HTML + CSS + JS together.
 
-Install or create plugins from `/admin/extensions`:
+### 🧪 Create or install
 
-1. Upload a manifest JSON file, load a manifest URL, or start from a built-in template.
-2. Edit HTML templates, CSS, JS, custom tags, config, and translation strings.
-3. Enable the plugin when it is ready.
+1. Open `/admin/extensions`.
+2. Upload a manifest JSON file, load a manifest URL, or start from a built-in template.
+3. Edit HTML templates, CSS, JS, custom tags, config, and i18n strings.
+4. Enable the plugin when it is ready.
 
-Minimal widget extension HTML:
+### 🧱 Minimal component template
 
 ```html
 <template data-tag="callout-box">
@@ -176,8 +205,6 @@ Minimal widget extension HTML:
   </aside>
 </template>
 ```
-
-Optional widget extension JS:
 
 ```js
 DocForge.register({
@@ -190,7 +217,7 @@ DocForge.register({
 });
 ```
 
-Usage in a document:
+Use it in a document:
 
 ```html
 <callout-box title="{{t:callout.title}}">
@@ -198,28 +225,31 @@ Usage in a document:
 </callout-box>
 ```
 
-Runtime content can still use normal placeholders such as `{{t:key}}`, `{{img:key}}`, and `{{video:key}}`. Plain HTML remains valid even when a component extension is not enabled.
+Template placeholders:
 
-HTML templates are optional. A plugin can be CSS-only, JS-only, or use HTML + CSS + JS together. Template placeholders:
+| Placeholder | Meaning |
+| --- | --- |
+| `{{slot}}` | Original inner HTML of the custom tag. |
+| `{{attr:name}}` | Attribute value from the custom tag. |
 
-- `{{slot}}`: original inner HTML of the custom tag.
-- `{{attr:name}}`: an attribute from the custom tag.
+### 📦 Official vs private plugins
 
-Plugin cards include two export actions:
-
-- **Share** copies an install URL for deployments where the manifest endpoint is public.
-- **Download** exports the current manifest JSON so you can keep private plugins outside this repository.
-
-Project-provided plugins that are safe to publish can live in `Plugins/`. Private or client-specific plugins should stay under `PrivatePlugins/`:
+| Folder | Git status | Use case |
+| --- | --- | --- |
+| `Plugins/` | ✅ committed | Official or project-provided plugins safe to publish. |
+| `PrivatePlugins/` | 🚫 ignored | Local, private, commercial, or client-specific plugins. |
 
 ```bash
 mkdir Plugins
 mkdir PrivatePlugins
 ```
 
-`Plugins/` is committed. `PrivatePlugins/` is ignored by git by default. Use `PrivatePlugins/` for local manifest backups or private plugin work that should not be published with the open-source project.
+Plugin cards include:
 
-Official plugins in `Plugins/*.docforge-plugin.json` are synced into D1 after migrations:
+- 🔗 **Share**: copy an install URL when the manifest endpoint is public.
+- ⬇️ **Download**: export the current manifest JSON for private storage.
+
+Sync official plugins into D1:
 
 ```bash
 npm run plugins:sync          # local D1
@@ -228,7 +258,7 @@ npm run plugins:sync:remote   # Cloudflare D1
 
 ---
 
-## Project Structure
+## 🗂️ Project Structure
 
 ```text
 ├── migrations/              # D1 SQL migrations
@@ -252,37 +282,37 @@ npm run plugins:sync:remote   # Cloudflare D1
 
 ---
 
-## Database Schema
+## 🧬 Database Schema
 
-Core tables:
-
-- `plugins`: published documentation sites. Stores `slug`, `name`, `version`, `compatibility`, description, icon, tags, publish status, custom CSS, and custom JS.
-- `sections`: documentation tree. `parent_id` supports nested sections.
-- `content_blocks`: section content blocks. HTML, code, text, image, video, and plugin blocks are stored as JSON.
-- `media`: media index. `d2_key` maps to R2 objects, and `placeholder_key` maps to `{{img:key}}` / `{{video:key}}`.
-- `translations`: i18n store keyed by `plugin_id + key + locale`.
-- `extensions`: plugin manifests with optional HTML templates, CSS, JS, tags, config, and i18n.
-- `site_settings`: site-level title, footer, custom CSS, and Head HTML.
-- `admins`: admin username and password hash.
-- `analytics_events`: public doc visits with doc, path, IP, country, UA, and timestamp.
-- `schema_migrations`: created by the migration runner to track applied SQL files.
-
----
-
-## Commands
-
-```bash
-npm run dev                # local development
-npm run db:init            # run local D1 migrations
-npm run secrets:push       # sync .dev.vars to Cloudflare Secrets
-npm run db:migrate:remote  # run remote D1 migrations
-npm run deploy             # deploy Worker
-npm run deploy:local       # sync variables + remote migrations + deploy
-npm run typecheck          # TypeScript check
-```
+| Table | Purpose |
+| --- | --- |
+| `plugins` | Documentation sites: slug, name, version, compatibility, icon, tags, status, custom CSS/JS. |
+| `sections` | Documentation tree with nested sections through `parent_id`. |
+| `content_blocks` | HTML, code, text, image, video, and plugin blocks stored as JSON. |
+| `media` | R2 media index and `{{img:key}}` / `{{video:key}}` placeholder mapping. |
+| `translations` | i18n store keyed by `plugin_id + key + locale`. |
+| `extensions` | Runtime plugin manifests with HTML templates, CSS, JS, tags, config, and i18n. |
+| `site_settings` | Site-level title, icon, footer, custom CSS, and Head HTML. |
+| `admins` | Admin username and password hash. |
+| `analytics_events` | Public doc visits with doc, path, IP, country, UA, and timestamp. |
+| `schema_migrations` | Applied SQL migration tracking. |
 
 ---
 
-## License
+## 🧰 Commands
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Local development server. |
+| `npm run db:init` | Run local D1 migrations and sync official plugins. |
+| `npm run secrets:push` | Sync `.dev.vars` values to Cloudflare Secrets. |
+| `npm run db:migrate:remote` | Run remote D1 migrations and sync official plugins. |
+| `npm run deploy` | Deploy Worker. |
+| `npm run deploy:local` | Sync secrets, migrate remote D1, deploy Worker. |
+| `npm run typecheck` | TypeScript check. |
+
+---
+
+## 📄 License
 
 MIT
