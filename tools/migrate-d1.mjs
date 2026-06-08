@@ -75,7 +75,7 @@ function queryJson(sql, label) {
     'wrangler', 'd1', 'execute', dbName, modeFlag, '--command', sql, '--json',
   ], {
     cwd: root,
-    shell: true,
+    shell: false,
     encoding: 'utf8',
   });
 
