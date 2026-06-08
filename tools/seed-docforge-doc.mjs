@@ -3,11 +3,11 @@
  * Seed the DocForge project's own documentation.
  */
 
-const fs = require('node:fs');
+import { existsSync, readFileSync } from 'node:fs';
 
 function readDevVar(key) {
-  if (!fs.existsSync('.dev.vars')) return '';
-  const line = fs.readFileSync('.dev.vars', 'utf8')
+  if (!existsSync('.dev.vars')) return '';
+  const line = readFileSync('.dev.vars', 'utf8')
     .split(/\r?\n/)
     .find((item) => item.trim().startsWith(`${key}=`));
   return line ? line.slice(line.indexOf('=') + 1).trim() : '';
@@ -170,6 +170,30 @@ npm run typecheck</code></pre>
 <p>{{t:docforge.deploy.p.2}}</p>`,
   },
   {
+    slug: 'built-in-media',
+    titleZh: '内置媒体与图标',
+    titleEn: 'Built-in Media',
+    body: `<p>{{t:docforge.media.p.0}}</p>
+<pre><code class="language-bash">npm run media:sync
+npm run media:sync:remote</code></pre>
+<p>{{t:docforge.media.p.1}}</p>
+<table>
+  <tr><th>{{t:docforge.media.table.h.0}}</th><th>{{t:docforge.media.table.h.1}}</th></tr>
+  <tr><td>public/favicon.png</td><td>{{t:docforge.media.table.r.0}}</td></tr>
+  <tr><td>public/favicon.svg</td><td>{{t:docforge.media.table.r.1}}</td></tr>
+  <tr><td>public/favicon.ico</td><td>{{t:docforge.media.table.r.2}}</td></tr>
+</table>`,
+  },
+  {
+    slug: 'deployment-instance',
+    titleZh: '部署实例',
+    titleEn: 'Deployment Instance',
+    body: `<p>{{t:docforge.instance.p.0}}</p>
+<pre><code class="language-bash">git pull
+npm run deploy:local</code></pre>
+<p>{{t:docforge.instance.p.1}}</p>`,
+  },
+  {
     slug: 'visibility',
     titleZh: '文档可见性',
     titleEn: 'Document Visibility',
@@ -239,7 +263,16 @@ const translations = {
   'docforge.private.p.1': { zh: '这样可以保持公开仓库干净，同时保留本地商业插件或实验插件的开发空间。', en: 'This keeps the public repository clean while preserving local space for commercial or experimental plugins.' },
   'docforge.deploy.p.0': { zh: '部署前先同步 secrets，再迁移远端 D1，最后部署 Worker。', en: 'Before deployment, push secrets, migrate remote D1, then deploy the Worker.' },
   'docforge.deploy.p.1': { zh: '.dev.vars、.env、.env.local、.wrangler/ 和 PrivatePlugins/ 默认不上传 git。', en: '.dev.vars, .env, .env.local, .wrangler/, and PrivatePlugins/ are ignored by git by default.' },
-  'docforge.deploy.p.2': { zh: '本地开发先初始化 D1，再启动 dev server。提交前至少运行类型检查，涉及数据库结构时同步新增 migrations 文件。', en: 'For local development, initialize D1 before starting the dev server. Before committing, run typecheck at minimum and add migrations whenever the database schema changes.' },
+  'docforge.deploy.p.2': { zh: '本地开发先初始化 D1，再启动 dev server。初始化会执行迁移、同步官方插件，并把项目内置媒体写入媒体系统。提交前至少运行类型检查，涉及数据库结构时同步新增 migrations 文件。', en: 'For local development, initialize D1 before starting the dev server. Initialization runs migrations, syncs official plugins, and registers built-in project media. Before committing, run typecheck at minimum and add migrations whenever the database schema changes.' },
+  'docforge.media.p.0': { zh: 'DocForge 的项目图标和内置图片不会只放在 public/ 里。部署流程会把它们同步到 R2，并在 D1 media 表建立索引，这样媒体页、图标选择器和 {{img:key}} 都能使用同一套资源。', en: 'DocForge project icons and built-in images are not kept only under public/. The deployment flow syncs them to R2 and registers them in the D1 media table, so the media page, icon picker, and {{img:key}} use the same asset system.' },
+  'docforge.media.p.1': { zh: '默认同步 DocForge favicon 的 PNG、SVG 和 ICO 版本，远程部署时该步骤已经包含在 npm run db:migrate:remote 中。', en: 'By default, DocForge favicon PNG, SVG, and ICO variants are synced. On remote deployment this step is already included in npm run db:migrate:remote.' },
+  'docforge.media.table.h.0': { zh: '源文件', en: 'Source File' },
+  'docforge.media.table.h.1': { zh: '媒体 Key', en: 'Media Key' },
+  'docforge.media.table.r.0': { zh: '写入 /media/docforge/favicon.png，占位符 key 为 docforge-favicon。', en: 'Stored as /media/docforge/favicon.png with placeholder key docforge-favicon.' },
+  'docforge.media.table.r.1': { zh: '写入 /media/docforge/favicon.svg，占位符 key 为 docforge-favicon-svg。', en: 'Stored as /media/docforge/favicon.svg with placeholder key docforge-favicon-svg.' },
+  'docforge.media.table.r.2': { zh: '写入 /media/docforge/favicon.ico，占位符 key 为 docforge-favicon-ico。', en: 'Stored as /media/docforge/favicon.ico with placeholder key docforge-favicon-ico.' },
+  'docforge.instance.p.0': { zh: '实际部署实例可以使用单独目录维护，例如 DocForge-deploy-clean。这个目录只拉取公开仓库更新并部署，保留自己的 .dev.vars、wrangler.toml 绑定、R2/D1 数据和私有内容，不把本地实例改动提交回开源仓库。', en: 'A real deployment instance can be maintained in a separate directory, such as DocForge-deploy-clean. That directory only pulls public repository updates and deploys, while keeping its own .dev.vars, wrangler.toml bindings, R2/D1 data, and private content without committing local instance changes back to the open-source repository.' },
+  'docforge.instance.p.1': { zh: '开源仓库负责产品代码和官方插件；部署实例负责自己的数据迁移、媒体、账号和站点配置。', en: 'The open-source repository owns product code and official plugins; the deployment instance owns its data migration, media, account, and site configuration.' },
   'docforge.visibility.p.0': { zh: '文档有两个独立开关：启用访问控制 /slug 是否可打开；首页展示控制是否进入根路径文档列表。', en: 'Documents have two independent switches: enabled controls whether /slug is accessible; home listing controls whether it appears on the root page.' },
   'docforge.visibility.p.1': { zh: '这样可以让文档可直接访问，但不出现在 http://127.0.0.1:8787/ 首页列表。', en: 'This allows a document to remain directly accessible without appearing on http://127.0.0.1:8787/.' },
   'docforge.visibility.table.h.0': { zh: '状态', en: 'State' },
@@ -268,6 +301,7 @@ async function main() {
       version: '1.0.0',
       compatibility: 'Cloudflare Workers',
       description: '面向插件和项目文档的开源文档 CMS。',
+      iconUrl: '/media/docforge/favicon.png',
       badgeTags: JSON.stringify(['Workers', 'D1', 'R2', 'Plugins']),
       sortOrder: -100,
       enabled: true,
@@ -281,6 +315,7 @@ async function main() {
       version: '1.0.0',
       compatibility: 'Cloudflare Workers',
       description: '面向插件和项目文档的开源文档 CMS。',
+      iconUrl: '/media/docforge/favicon.png',
       badgeTags: JSON.stringify(['Workers', 'D1', 'R2', 'Plugins']),
       sortOrder: -100,
       enabled: true,
