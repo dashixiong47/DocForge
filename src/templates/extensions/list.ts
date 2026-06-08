@@ -37,6 +37,9 @@ function extI18n(ext: Extension, key: string, lang: string, fallback: string): s
   return entry[lang] || entry.zh || entry.en || Object.values(entry)[0] || fallback;
 }
 
+const SHARE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.6 15.4 7.4M8.6 13.4l6.8 3.2"/></svg>';
+const DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>';
+
 // ─── Plugins list page (inside admin layout) ──────────────────────────────────
 export function extensionsList(exts: Extension[], lang = 'zh'): string {
   const allTags = [...new Set(exts.flatMap(e => e.tags))].sort();
@@ -94,8 +97,10 @@ export function extensionsList(exts: Extension[], lang = 'zh'): string {
 .page-hd-left h2{margin:0 0 4px;font-size:20px;font-weight:700}
 .page-hd-left p{margin:0;font-size:13px;color:var(--muted)}
 .page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.icon-btn{width:32px;height:32px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:var(--radius);background:transparent;color:var(--muted);cursor:pointer;font:inherit;transition:.12s}
-.icon-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(88,166,255,.06)}
+.icon-btn{width:34px;height:34px;padding:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:9px;background:rgba(255,255,255,.02);color:var(--muted);cursor:pointer;font:inherit;transition:.12s}
+.icon-btn svg{width:16px;height:16px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.icon-btn:hover{border-color:rgba(88,166,255,.55);color:var(--accent);background:rgba(88,166,255,.08)}
+.icon-btn:active{transform:translateY(1px);background:rgba(88,166,255,.12)}
 .filter-bar{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px;align-items:center}
 .filter-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .tag-filter{padding:3px 10px;border:1px solid var(--border);border-radius:20px;background:transparent;color:var(--muted);font:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:.12s}
@@ -197,8 +202,8 @@ ${exts.length === 0 ? `
           <div class="ext-meta">v<span data-ext-i18n="${ext.id}:meta.version" data-fallback="${esc(ext.version)}">${esc(displayVersion)}</span>${ext.author ? ' · <span data-ext-i18n="' + ext.id + ':meta.author" data-fallback="' + esc(ext.author) + '">' + esc(displayAuthor) + '</span>' : ''} · <code style="font-size:10px" data-ext-i18n="${ext.id}:meta.slug" data-fallback="${esc(ext.slug)}">${esc(displaySlug)}</code></div>
         </div>
         <div class="ext-head-actions">
-          <button class="icon-btn" onclick="shareExt(${ext.id},'${esc(ext.slug)}')" data-i18n-title="ext.share" title="分享">↗</button>
-          <button class="icon-btn" onclick="downloadExt(${ext.id},'${esc(ext.slug)}')" data-i18n-title="ext.download" title="下载">↓</button>
+          <button class="icon-btn" onclick="shareExt(${ext.id},'${esc(ext.slug)}')" data-i18n-title="ext.share" title="分享" aria-label="Share">${SHARE_ICON}</button>
+          <button class="icon-btn" onclick="downloadExt(${ext.id},'${esc(ext.slug)}')" data-i18n-title="ext.download" title="下载" aria-label="Download">${DOWNLOAD_ICON}</button>
         </div>
       </div>
       ${ext.description ? `<div class="ext-desc" data-ext-i18n="${ext.id}:meta.description" data-fallback="${esc(ext.description)}">${esc(displayDesc)}</div>` : ''}
