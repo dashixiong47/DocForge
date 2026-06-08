@@ -176,15 +176,20 @@ docsRoutes.get('/', async (c) => {
   }
   // Collect available locales from system translations
   let availableLocales: string[] = ['zh', 'en'];
+  const systemTranslations: TranslationsMap = new Map();
   const systemPlugin = await db.select().from(plugins).where(eq(plugins.slug, '__system__')).get();
   if (systemPlugin) {
-    const locRows = await db.select({ locale: translations.locale })
+    const locRows = await db.select({ key: translations.key, locale: translations.locale, value: translations.value })
       .from(translations).where(eq(translations.pluginId, systemPlugin.id)).all();
+    for (const row of locRows) {
+      if (!systemTranslations.has(row.key)) systemTranslations.set(row.key, {});
+      systemTranslations.get(row.key)![row.locale] = row.value;
+    }
     const locs = [...new Set(locRows.map(r => r.locale))].filter(Boolean);
     if (locs.length > 0) availableLocales = locs;
   }
   return c.html(docPage.home({
-    plugins: allPlugins, settings, lang, availableLocales, pluginTranslations,
+    plugins: allPlugins, settings, lang, availableLocales, pluginTranslations, systemTranslations,
     extHeadHtml:    buildExtensionHead(enabledExts, lang),
     extI18nHtml:    buildExtensionI18nInject(enabledExts),
     extMediaHtml:   '',

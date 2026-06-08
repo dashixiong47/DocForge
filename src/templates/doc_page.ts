@@ -700,6 +700,7 @@ export function home(params: {
   settings: Record<string, string>;
   lang: string;
   pluginTranslations?: Map<number, TranslationsMap>;
+  systemTranslations?: TranslationsMap;
   availableLocales?: string[];
   extHeadHtml?: string;
   extScriptsHtml?: string;
@@ -707,11 +708,14 @@ export function home(params: {
   extMediaHtml?: string;
   extTemplatesHtml?: string;
 }): string {
-  const { plugins: pluginList, settings, lang, pluginTranslations = new Map(), availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '' } = params;
+  const { plugins: pluginList, settings, lang, pluginTranslations = new Map(), systemTranslations = new Map(), availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '' } = params;
+  const siteTitle = resolve(systemTranslations, 'site.title', lang, settings.site_title || 'DocForge');
+  const siteSubtitle = resolve(systemTranslations, 'site.subtitle', lang, settings.site_subtitle || 'Plugin documentation');
+  const siteLogo = resolve(systemTranslations, 'site.logo', lang, settings.header_logo_text || 'DocForge');
   const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
   return `<!doctype html><html lang="${htmlLang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(settings.site_title || 'DocForge')}</title>
+<title>${esc(siteTitle)}</title>
 ${faviconLink(settings.site_icon || '')}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flag-icons@7.2.3/css/flag-icons.min.css">
 ${settings.custom_css ? `<style>${settings.custom_css}</style>` : docThemeCSS()}
@@ -726,9 +730,10 @@ ${extTemplatesHtml}
 .home-eyebrow{margin:0 0 10px;color:var(--c-accent);font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
 .home-hero h1{font-size:clamp(34px,4vw,52px);line-height:1.05;margin:0 0 12px}
 .home-hero p{font-size:16px;line-height:1.65;max-width:700px;margin:0;color:var(--c-muted)}
-.home-count{min-width:132px;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface);padding:14px 16px;text-align:right;box-shadow:var(--shadow-sm)}
-.home-count strong{display:block;font-size:28px;color:var(--c-text)}
-.home-count span{font-size:12px;color:var(--c-muted)}
+.home-count{display:flex;align-items:center;justify-content:flex-end;gap:10px;align-self:end;padding-bottom:10px;color:var(--c-muted);font-size:13px;white-space:nowrap}
+.home-count::before{content:"";width:6px;height:6px;border-radius:999px;background:var(--c-accent);box-shadow:0 0 14px rgba(88,166,255,.5)}
+.home-count strong{font-size:22px;line-height:1;color:var(--c-text);font-weight:850}
+.home-count span{color:var(--c-muted)}
 .plugin-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
 .plugin-card{display:flex;flex-direction:column;gap:14px;min-height:178px;padding:18px;border:1px solid var(--c-border);border-radius:12px;background:var(--c-surface);transition:.15s;position:relative;overflow:hidden}
 .plugin-card:hover{border-color:var(--c-accent);box-shadow:var(--shadow);transform:translateY(-1px)}
@@ -752,7 +757,7 @@ ${extTemplatesHtml}
 .doc-lp-menu li{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:14px}
 .doc-lp-menu li:hover{background:rgba(88,166,255,.08);color:var(--c-accent)}
 .doc-lp-menu li.active{color:var(--c-accent);font-weight:600}
-@media(max-width:720px){.home-shell{padding-top:28px}.home-hero{grid-template-columns:1fr}.home-count{text-align:left}.plugin-card{min-height:0}}
+@media(max-width:720px){.home-shell{padding-top:28px}.home-hero{grid-template-columns:1fr}.home-count{justify-content:flex-start;padding-bottom:0}.plugin-card{min-height:0}}
 </style>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -771,7 +776,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </head><body>
 <nav class="topbar-home">
   <div class="topbar-inner">
-    <div style="font-weight:800;font-size:18px;color:var(--c-text)">${esc(settings.header_logo_text || 'Plugin Docs')}</div>
+    <div style="font-weight:800;font-size:18px;color:var(--c-text)">${esc(siteLogo)}</div>
     <div class="doc-lp" id="doc-lp">
       <button class="doc-lp-btn" id="doc-lp-btn" type="button">
         ${flagSpan(lang)} <span>${localeName(lang)}</span>
@@ -788,9 +793,9 @@ document.addEventListener('DOMContentLoaded', function() {
 <main class="home-shell">
   <section class="home-hero">
     <div>
-      <p class="home-eyebrow">${esc(settings.header_logo_text || 'Plugin Docs')}</p>
-      <h1>${esc(settings.site_title || 'DocForge')}</h1>
-      <p>${esc(settings.site_subtitle || 'Plugin documentation')}</p>
+      <p class="home-eyebrow">${esc(siteLogo)}</p>
+      <h1>${esc(siteTitle)}</h1>
+      <p>${esc(siteSubtitle)}</p>
     </div>
     <div class="home-count"><strong>${pluginList.length}</strong><span>${docUI('home.available', lang)}</span></div>
   </section>

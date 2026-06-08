@@ -60,6 +60,110 @@ async function deleteExtI18n(
   }
 }
 
+const SITE_TRANSLATION_DEFAULTS: Record<string, Record<'zh' | 'en', string>> = {
+  'site.title': {
+    zh: 'DocForge',
+    en: 'DocForge',
+  },
+  'site.subtitle': {
+    zh: '面向项目和插件文档的开放文档平台。',
+    en: 'Open documentation platform for projects and plugins.',
+  },
+  'site.logo': {
+    zh: 'DocForge',
+    en: 'DocForge',
+  },
+};
+
+function normalizedSiteTranslationValue(transKey: string, locale: 'zh' | 'en', value: string): string {
+  const trimmed = value.trim();
+  if (transKey === 'site.subtitle' && locale === 'zh') {
+    if (!trimmed || trimmed === SITE_TRANSLATION_DEFAULTS['site.subtitle'].en || trimmed === 'Plugin documentation') {
+      return SITE_TRANSLATION_DEFAULTS['site.subtitle'].zh;
+    }
+  }
+  return trimmed || SITE_TRANSLATION_DEFAULTS[transKey]?.[locale] || '';
+}
+
+const SITE_SETTING_TRANSLATION_KEYS: Record<string, string> = {
+  site_title: 'site.title',
+  site_subtitle: 'site.subtitle',
+  header_logo_text: 'site.logo',
+};
+
+async function getOrCreateSystemPlugin(
+  db: ReturnType<typeof import('../db').createDB>
+): Promise<number> {
+  const existing = await db.select({ id: plugins.id })
+    .from(plugins).where(eq(plugins.slug, '__system__')).get();
+  if (existing) return existing.id;
+  const now = new Date().toISOString();
+  const row = await db.insert(plugins).values({
+    slug: '__system__',
+    name: 'System i18n',
+    version: '1.0.0',
+    compatibility: '',
+    description: 'Site UI and homepage translation strings',
+    sortOrder: 10000,
+    enabled: 0,
+    listed: 0,
+    createdAt: now,
+    updatedAt: now,
+  }).returning().get();
+  return row.id;
+}
+
+async function upsertTranslationValue(
+  db: ReturnType<typeof import('../db').createDB>,
+  pluginId: number,
+  key: string,
+  locale: string,
+  value: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await db.select({ id: translations.id }).from(translations)
+    .where(and(eq(translations.pluginId, pluginId), eq(translations.key, key), eq(translations.locale, locale))).get();
+  if (existing) {
+    await db.update(translations).set({ value, updatedAt: now }).where(eq(translations.id, existing.id)).run();
+  } else {
+    await db.insert(translations).values({ pluginId, key, locale, value, updatedAt: now }).run();
+  }
+}
+
+async function ensureTranslationValue(
+  db: ReturnType<typeof import('../db').createDB>,
+  pluginId: number,
+  key: string,
+  locale: string,
+  value: string,
+): Promise<void> {
+  const existing = await db.select({ id: translations.id }).from(translations)
+    .where(and(eq(translations.pluginId, pluginId), eq(translations.key, key), eq(translations.locale, locale))).get();
+  if (!existing) {
+    await db.insert(translations).values({
+      pluginId,
+      key,
+      locale,
+      value,
+      updatedAt: new Date().toISOString(),
+    }).run();
+  }
+}
+
+async function syncSiteSettingTranslations(
+  db: ReturnType<typeof import('../db').createDB>,
+  body: Record<string, string>,
+): Promise<void> {
+  const pluginId = await getOrCreateSystemPlugin(db);
+  for (const [settingKey, transKey] of Object.entries(SITE_SETTING_TRANSLATION_KEYS)) {
+    if (body[settingKey] === undefined) continue;
+    const value = String(body[settingKey] || '');
+    await upsertTranslationValue(db, pluginId, transKey, 'zh', normalizedSiteTranslationValue(transKey, 'zh', value));
+    const enDefault = SITE_TRANSLATION_DEFAULTS[transKey]?.en || value;
+    await ensureTranslationValue(db, pluginId, transKey, 'en', enDefault);
+  }
+}
+
 function extractI18nKeys(html: string): string[] {
   const matches = [...html.matchAll(/\{\{t:([^}]+)\}\}/g)];
   return [...new Set(matches.map(m => m[1].trim()))];
@@ -603,6 +707,7 @@ apiRoutes.put('/admin/settings', async (c) => {
       await db.insert(siteSettings).values({ key, value, updatedAt: now }).run();
     }
   }
+  await syncSiteSettingTranslations(db, body);
   return c.json({ ok: true });
 });
 

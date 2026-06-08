@@ -19,6 +19,73 @@ const TRANS_PAGE_SIZE = 20;
 
 export const adminRoutes = new Hono<AppType>();
 
+const SITE_TRANSLATION_DEFAULTS: Record<string, Record<'zh' | 'en', string>> = {
+  'site.title': {
+    zh: 'DocForge',
+    en: 'DocForge',
+  },
+  'site.subtitle': {
+    zh: '面向项目和插件文档的开放文档平台。',
+    en: 'Open documentation platform for projects and plugins.',
+  },
+  'site.logo': {
+    zh: 'DocForge',
+    en: 'DocForge',
+  },
+};
+
+async function getOrCreateSystemPlugin(
+  db: ReturnType<typeof import('../db').createDB>
+): Promise<number> {
+  const existing = await db.select({ id: plugins.id })
+    .from(plugins).where(eq(plugins.slug, '__system__')).get();
+  if (existing) return existing.id;
+  const now = new Date().toISOString();
+  const row = await db.insert(plugins).values({
+    slug: '__system__',
+    name: 'System i18n',
+    version: '1.0.0',
+    compatibility: '',
+    description: 'Site UI and homepage translation strings',
+    sortOrder: 10000,
+    enabled: 0,
+    listed: 0,
+    createdAt: now,
+    updatedAt: now,
+  }).returning().get();
+  return row.id;
+}
+
+async function ensureSystemSiteTranslations(
+  db: ReturnType<typeof import('../db').createDB>
+): Promise<number> {
+  const pluginId = await getOrCreateSystemPlugin(db);
+  const settings = await getSettingsMap(db);
+  const defaults = {
+    ...SITE_TRANSLATION_DEFAULTS,
+    'site.title': {
+      zh: settings.site_title || SITE_TRANSLATION_DEFAULTS['site.title'].zh,
+      en: SITE_TRANSLATION_DEFAULTS['site.title'].en,
+    },
+    'site.logo': {
+      zh: settings.header_logo_text || SITE_TRANSLATION_DEFAULTS['site.logo'].zh,
+      en: SITE_TRANSLATION_DEFAULTS['site.logo'].en,
+    },
+  };
+  const now = new Date().toISOString();
+  for (const [key, locales] of Object.entries(defaults)) {
+    for (const [locale, value] of Object.entries(locales)) {
+      const existing = await db.select({ id: translations.id }).from(translations)
+        .where(and(eq(translations.pluginId, pluginId), eq(translations.key, key), eq(translations.locale, locale)))
+        .get();
+      if (!existing) {
+        await db.insert(translations).values({ pluginId, key, locale, value, updatedAt: now }).run();
+      }
+    }
+  }
+  return pluginId;
+}
+
 async function ensureDocMetaTranslations(
   db: ReturnType<typeof import('../db').createDB>,
   plugin: { id: number; name: string; description: string | null },
@@ -217,9 +284,7 @@ adminRoutes.get('/translations', async (c) => {
 // ─── Site UI translations (system plugin) ─────────────────────────────────────
 adminRoutes.get('/translations/system', async (c) => {
   const db = c.get('db');
-  const systemPlugin = await db.select({ id: plugins.id }).from(plugins)
-    .where(eq(plugins.slug, '__system__')).get();
-  const systemId = systemPlugin?.id ?? 0;
+  const systemId = await ensureSystemSiteTranslations(db);
   const rows = await db.select().from(translations)
     .where(eq(translations.pluginId, systemId))
     .orderBy(asc(translations.key), asc(translations.locale))
