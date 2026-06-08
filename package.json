@@ -8,9 +8,11 @@
     "secrets:push": "node tools/push-dev-vars-secrets.mjs",
     "plugins:sync": "node tools/sync-official-plugins.mjs --local",
     "plugins:sync:remote": "node tools/sync-official-plugins.mjs --remote",
+    "media:sync": "node tools/sync-project-media.mjs --local",
+    "media:sync:remote": "node tools/sync-project-media.mjs --remote",
     "docs:seed:docforge": "node tools/seed-docforge-doc.mjs",
-    "db:init": "node tools/migrate-d1.mjs --local && npm run plugins:sync",
-    "db:migrate:remote": "node tools/migrate-d1.mjs --remote && npm run plugins:sync:remote",
+    "db:init": "node tools/migrate-d1.mjs --local && npm run plugins:sync && npm run media:sync",
+    "db:migrate:remote": "node tools/migrate-d1.mjs --remote && npm run plugins:sync:remote && npm run media:sync:remote",
     "deploy:local": "npm run secrets:push && npm run db:migrate:remote && wrangler deploy",
     "typecheck": "tsc --noEmit"
   },
