@@ -7,6 +7,7 @@ const dbName = process.env.D1_DATABASE || 'docforge-db';
 const root = process.cwd();
 const migrationsDir = resolve(root, 'migrations');
 const tmpDir = resolve(root, '.wrangler');
+const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 mkdirSync(tmpDir, { recursive: true });
 
@@ -25,7 +26,7 @@ if (!migrationFiles.length) {
 }
 
 function runWrangler(args) {
-  const result = spawnSync('npx', ['wrangler', ...args], {
+  const result = spawnSync(npxBin, ['wrangler', ...args], {
     cwd: root,
     shell: true,
     stdio: 'inherit',
@@ -71,7 +72,7 @@ runSql(
 function queryJson(sql, label) {
   const marker = resolve(tmpDir, `${label}-${mode}.sql`);
   writeFileSync(marker, sql);
-  const result = spawnSync('npx', [
+  const result = spawnSync(npxBin, [
     'wrangler', 'd1', 'execute', dbName, modeFlag, '--command', sql, '--json',
   ], {
     cwd: root,
