@@ -593,7 +593,7 @@ function renderBlock(block: ContentBlock, t: TranslationsMap, m: MediaMap = new 
 
   switch (block.type) {
     case 'html':
-      return applyPlaceholders(applyI18n(String(content.html || ''), t, lang), m);
+      return applyI18n(applyPlaceholders(String(content.html || ''), m), t, lang);
 
     case 'text': {
       const text = content.key
