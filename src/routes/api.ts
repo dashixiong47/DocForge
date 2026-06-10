@@ -978,6 +978,9 @@ apiRoutes.get('/admin/stats', async (c) => {
   const since = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
   since.setHours(0, 0, 0, 0);
   const sinceIso = since.toISOString();
+  const since30 = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000);
+  since30.setHours(0, 0, 0, 0);
+  const since30Iso = since30.toISOString();
   const events = await db.select({
     pluginSlug: analyticsEvents.pluginSlug,
     ip: analyticsEvents.ip,
@@ -985,6 +988,18 @@ apiRoutes.get('/admin/stats', async (c) => {
     userAgent: analyticsEvents.userAgent,
     createdAt: analyticsEvents.createdAt,
   }).from(analyticsEvents).where(sql`${analyticsEvents.createdAt} >= ${sinceIso}`).all();
+  const events30 = await db.select({
+    pluginSlug: analyticsEvents.pluginSlug,
+    ip: analyticsEvents.ip,
+    country: analyticsEvents.country,
+    userAgent: analyticsEvents.userAgent,
+    createdAt: analyticsEvents.createdAt,
+  }).from(analyticsEvents).where(sql`${analyticsEvents.createdAt} >= ${since30Iso}`).all();
+  const pluginRows = await db.select({
+    slug: plugins.slug,
+    name: plugins.name,
+  }).from(plugins).all();
+  const pluginNameMap = Object.fromEntries(pluginRows.map(p => [p.slug, p.name || p.slug]));
 
   const dayMap: Record<string, number> = {};
   for (let i = 0; i < 7; i++) {
@@ -997,16 +1012,29 @@ apiRoutes.get('/admin/stats', async (c) => {
   for (const e of events) {
     const day = e.createdAt.slice(0, 10);
     dayMap[day] = (dayMap[day] || 0) + 1;
-    docMap[e.pluginSlug] = (docMap[e.pluginSlug] || 0) + 1;
-    countryMap[e.country || 'Unknown'] = (countryMap[e.country || 'Unknown'] || 0) + 1;
     if (e.ip) ipSet.add(e.ip);
   }
-  const topDocs = Object.entries(docMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([slug, views]) => ({ slug, views }));
+  const ipSet30 = new Set<string>();
+  const deviceMap: Record<string, number> = { Desktop: 0, Mobile: 0, Bot: 0 };
+  for (const e of events30) {
+    docMap[e.pluginSlug] = (docMap[e.pluginSlug] || 0) + 1;
+    countryMap[e.country || 'Unknown'] = (countryMap[e.country || 'Unknown'] || 0) + 1;
+    if (e.ip) ipSet30.add(e.ip);
+    const ua = (e.userAgent || '').toLowerCase();
+    const device = ua.includes('bot') || ua.includes('spider') || ua.includes('crawler')
+      ? 'Bot'
+      : ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')
+        ? 'Mobile'
+        : 'Desktop';
+    deviceMap[device] = (deviceMap[device] || 0) + 1;
+  }
+  const topDocs = Object.entries(docMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([slug, views]) => ({ slug, title: pluginNameMap[slug] || slug, views }));
   const countries = Object.entries(countryMap).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([country, views]) => ({ country, views }));
-  const recentIps = events.slice(-10).reverse().map(e => ({
+  const recentIps = events30.slice(-10).reverse().map(e => ({
     ip: e.ip || 'unknown',
     country: e.country || 'Unknown',
-    doc: e.pluginSlug,
+    doc: pluginNameMap[e.pluginSlug] || e.pluginSlug,
+    slug: e.pluginSlug,
     at: e.createdAt,
   }));
   const shareEvents = await db.select({
@@ -1038,9 +1066,13 @@ apiRoutes.get('/admin/stats', async (c) => {
     analytics: {
       views7d: events.length,
       visitors7d: ipSet.size,
+      views30d: events30.length,
+      visitors30d: ipSet30.size,
+      countries30d: Object.keys(countryMap).filter(c => c && c !== 'Unknown').length,
       series: Object.entries(dayMap).map(([date, views]) => ({ date, views })),
       topDocs,
       countries,
+      devices: Object.entries(deviceMap).map(([device, views]) => ({ device, views })),
       recentIps,
     },
     shares: {

@@ -9,7 +9,14 @@ dist/
 
 # temp / scratch files (put anything here, won't be committed)
 tmp/
+tmp-*
+tmp-*.*
+tmp-dashboard-*.png
+playwright-report/
+test-results/
+screenshots/
 *.tmp
+*.bak
 fix_backticks.mjs
 rebuild_editor.mjs
 fix_all.mjs
