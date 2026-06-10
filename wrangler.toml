@@ -10,7 +10,7 @@ enabled = true
 [[d1_databases]]
 binding = "DB"
 database_name = "docforge-db"
-database_id = "local-dev"
+database_id = "b251fceb-5de2-4934-9a1c-684f26022d2b"
 
 [[r2_buckets]]
 binding = "MEDIA"
