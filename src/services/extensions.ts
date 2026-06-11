@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { extensions } from '../db/schema';
 import type { MediaMap, TranslationsMap } from '../templates/doc_page';
+import { KV_EXTENSIONS_KEY, KV_EXTENSIONS_TTL } from './kv';
 
 export type ExtType = 'theme' | 'widget' | 'system';
 
@@ -81,12 +82,21 @@ function parseExt(row: typeof extensions.$inferSelect): Extension {
 }
 
 export async function loadEnabledExtensions(
-  db: ReturnType<typeof import('../db').createDB>
+  db: ReturnType<typeof import('../db').createDB>,
+  kv?: KVNamespace,
 ): Promise<Extension[]> {
-  const rows = await db.select().from(extensions)
-    .where(eq(extensions.enabled, 1))
-    .all();
-  return rows.map(parseExt);
+  if (kv) {
+    const cached = await kv.get(KV_EXTENSIONS_KEY);
+    if (cached) {
+      try { return JSON.parse(cached); } catch {}
+    }
+  }
+  const rows = await db.select().from(extensions).where(eq(extensions.enabled, 1)).all();
+  const result = rows.map(parseExt);
+  if (kv) {
+    kv.put(KV_EXTENSIONS_KEY, JSON.stringify(result), { expirationTtl: KV_EXTENSIONS_TTL }).catch(() => {});
+  }
+  return result;
 }
 
 export async function loadAllExtensions(

@@ -7,10 +7,17 @@ assets = { directory = "./public", binding = "ASSETS" }
 [observability]
 enabled = true
 
+[placement]
+mode = "smart"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "docforge-db"
 database_id = "b251fceb-5de2-4934-9a1c-684f26022d2b"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "4f9ed277a7894430866e015c1030fb77"
 
 [[r2_buckets]]
 binding = "MEDIA"

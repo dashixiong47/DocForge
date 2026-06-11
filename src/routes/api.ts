@@ -3,6 +3,7 @@ import { eq, asc, count, and, ne, like, notLike, sql } from 'drizzle-orm';
 import { analyticsEvents, plugins, sections, contentBlocks, media, siteSettings, admins, translations, extensions, extensionShareEvents } from '../db/schema';
 import { extensionManifest, validateManifest } from '../services/extensions';
 import { adminAuth } from '../services/auth';
+import { kvInvalidatePlugin, kvInvalidatePluginData, KV_SETTINGS_KEY, KV_EXTENSIONS_KEY } from '../services/kv';
 import type { AppType } from '../types';
 
 // ─── Extension i18n sync helpers ─────────────────────────────────────────────
@@ -455,6 +456,8 @@ apiRoutes.put('/admin/plugins/:id', async (c) => {
     updatedAt: now,
   }).where(eq(plugins.id, id)).run();
   await syncPluginMetaTranslations(db, id, body);
+  const kv = c.env.KV;
+  if (kv) c.executionCtx.waitUntil(kvInvalidatePlugin(kv, id).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -465,6 +468,8 @@ apiRoutes.put('/admin/plugins/:id/toggle', async (c) => {
   if (!plugin) return c.json({ ok: false }, 404);
   const next = plugin.enabled ? 0 : 1;
   await db.update(plugins).set({ enabled: next, updatedAt: new Date().toISOString() }).where(eq(plugins.id, id)).run();
+  const kv1 = c.env.KV;
+  if (kv1) c.executionCtx.waitUntil(kvInvalidatePlugin(kv1, id).catch(() => {}));
   return c.json({ ok: true, enabled: next });
 });
 
@@ -475,12 +480,16 @@ apiRoutes.put('/admin/plugins/:id/listed-toggle', async (c) => {
   if (!plugin) return c.json({ ok: false }, 404);
   const next = plugin.listed ? 0 : 1;
   await db.update(plugins).set({ listed: next, updatedAt: new Date().toISOString() }).where(eq(plugins.id, id)).run();
+  const kv2 = c.env.KV;
+  if (kv2) c.executionCtx.waitUntil(kvInvalidatePlugin(kv2, id).catch(() => {}));
   return c.json({ ok: true, listed: next });
 });
 
 apiRoutes.delete('/admin/plugins/:id', async (c) => {
   const db = c.get('db');
   const id = Number(c.req.param('id'));
+  const kv = c.env.KV;
+  if (kv) c.executionCtx.waitUntil(kvInvalidatePlugin(kv, id).catch(() => {}));
   await db.delete(plugins).where(eq(plugins.id, id)).run();
   return c.json({ ok: true });
 });
@@ -511,6 +520,8 @@ apiRoutes.post('/admin/sections', async (c) => {
     createdAt: now,
     updatedAt: now,
   }).returning().get();
+  const kv = c.env.KV;
+  if (kv) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, body.pluginId).catch(() => {}));
   return c.json(result);
 });
 
@@ -519,6 +530,7 @@ apiRoutes.put('/admin/sections/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const body = await c.req.json<{ titleEn?: string; titleZh?: string; slug?: string; sortOrder?: number; parentId?: number | null }>();
   const now = new Date().toISOString();
+  const sec = await db.select({ pluginId: sections.pluginId }).from(sections).where(eq(sections.id, id)).get();
   await db.update(sections).set({
     ...(body.titleEn ? { titleEn: body.titleEn } : {}),
     ...(body.titleZh ? { titleZh: body.titleZh } : {}),
@@ -527,13 +539,18 @@ apiRoutes.put('/admin/sections/:id', async (c) => {
     ...(body.parentId !== undefined ? { parentId: body.parentId } : {}),
     updatedAt: now,
   }).where(eq(sections.id, id)).run();
+  const kv = c.env.KV;
+  if (kv && sec) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, sec.pluginId).catch(() => {}));
   return c.json({ ok: true });
 });
 
 apiRoutes.delete('/admin/sections/:id', async (c) => {
   const db = c.get('db');
   const id = Number(c.req.param('id'));
+  const sec = await db.select({ pluginId: sections.pluginId }).from(sections).where(eq(sections.id, id)).get();
   await db.delete(sections).where(eq(sections.id, id)).run();
+  const kv = c.env.KV;
+  if (kv && sec) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, sec.pluginId).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -543,6 +560,7 @@ apiRoutes.put('/admin/sections/:id/blocks-bulk', async (c) => {
   const db = c.get('db');
   const body = await c.req.json<{ blocks: Array<{ type: string; contentJson: string; sortOrder: number }> }>();
   const now = new Date().toISOString();
+  const bulkSec = await db.select({ pluginId: sections.pluginId }).from(sections).where(eq(sections.id, sectionId)).get();
   await db.delete(contentBlocks).where(eq(contentBlocks.sectionId, sectionId)).run();
   for (const block of body.blocks) {
     await db.insert(contentBlocks).values({
@@ -555,6 +573,8 @@ apiRoutes.put('/admin/sections/:id/blocks-bulk', async (c) => {
     }).run();
     await collectKeysFromBlock(db, sectionId, block.contentJson, block.type);
   }
+  const kv = c.env.KV;
+  if (kv && bulkSec) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, bulkSec.pluginId).catch(() => {}));
   return c.json({ ok: true, count: body.blocks.length });
 });
 
@@ -576,9 +596,16 @@ apiRoutes.post('/admin/sections/reorder', async (c) => {
   const db = c.get('db');
   const body = await c.req.json<{ orderedIds: number[] }>();
   const now = new Date().toISOString();
+  let reorderPluginId: number | null = null;
   for (let i = 0; i < body.orderedIds.length; i++) {
+    if (i === 0) {
+      const s = await db.select({ pluginId: sections.pluginId }).from(sections).where(eq(sections.id, body.orderedIds[0])).get();
+      if (s) reorderPluginId = s.pluginId;
+    }
     await db.update(sections).set({ sortOrder: i, updatedAt: now }).where(eq(sections.id, body.orderedIds[i])).run();
   }
+  const kv = c.env.KV;
+  if (kv && reorderPluginId) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, reorderPluginId).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -663,6 +690,9 @@ apiRoutes.post('/admin/content-blocks', async (c) => {
     updatedAt: now,
   }).returning().get();
   await collectKeysFromBlock(db, body.sectionId, json, body.type);
+  const cbSec = await db.select({ pluginId: sections.pluginId }).from(sections).where(eq(sections.id, body.sectionId)).get();
+  const kv = c.env.KV;
+  if (kv && cbSec) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, cbSec.pluginId).catch(() => {}));
   return c.json(result);
 });
 
@@ -672,15 +702,18 @@ apiRoutes.put('/admin/content-blocks/:id', async (c) => {
   const body = await c.req.json<{ type?: string; content?: Record<string, unknown>; contentJson?: string; sortOrder?: number }>();
   const now = new Date().toISOString();
   const json = body.contentJson || (body.content ? JSON.stringify(body.content) : undefined);
+  const existingBlock = await db.select({ sectionId: contentBlocks.sectionId, type: contentBlocks.type }).from(contentBlocks).where(eq(contentBlocks.id, id)).get();
   await db.update(contentBlocks).set({
     ...(body.type ? { type: body.type } : {}),
     ...(json ? { contentJson: json } : {}),
     ...(body.sortOrder !== undefined ? { sortOrder: body.sortOrder } : {}),
     updatedAt: now,
   }).where(eq(contentBlocks.id, id)).run();
-  if (json) {
-    const existing = await db.select({ sectionId: contentBlocks.sectionId, type: contentBlocks.type }).from(contentBlocks).where(eq(contentBlocks.id, id)).get();
-    if (existing) await collectKeysFromBlock(db, existing.sectionId, json, body.type || existing.type);
+  if (json && existingBlock) await collectKeysFromBlock(db, existingBlock.sectionId, json, body.type || existingBlock.type);
+  if (existingBlock) {
+    const cbSec2 = await db.select({ pluginId: sections.pluginId }).from(sections).where(eq(sections.id, existingBlock.sectionId)).get();
+    const kv = c.env.KV;
+    if (kv && cbSec2) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, cbSec2.pluginId).catch(() => {}));
   }
   return c.json({ ok: true });
 });
@@ -688,7 +721,13 @@ apiRoutes.put('/admin/content-blocks/:id', async (c) => {
 apiRoutes.delete('/admin/content-blocks/:id', async (c) => {
   const db = c.get('db');
   const id = Number(c.req.param('id'));
+  const delBlock = await db.select({ sectionId: contentBlocks.sectionId }).from(contentBlocks).where(eq(contentBlocks.id, id)).get();
   await db.delete(contentBlocks).where(eq(contentBlocks.id, id)).run();
+  if (delBlock) {
+    const delSec = await db.select({ pluginId: sections.pluginId }).from(sections).where(eq(sections.id, delBlock.sectionId)).get();
+    const kv = c.env.KV;
+    if (kv && delSec) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, delSec.pluginId).catch(() => {}));
+  }
   return c.json({ ok: true });
 });
 
@@ -708,6 +747,8 @@ apiRoutes.put('/admin/settings', async (c) => {
     }
   }
   await syncSiteSettingTranslations(db, body);
+  const kvSettings = c.env.KV;
+  if (kvSettings) c.executionCtx.waitUntil(kvSettings.delete(KV_SETTINGS_KEY).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -737,6 +778,8 @@ apiRoutes.delete('/admin/media/:id', async (c) => {
   if (!record) return c.json({ error: 'Not found' }, 404);
   await c.env.MEDIA.delete(record.d2Key);
   await db.delete(media).where(eq(media.id, id)).run();
+  const kv = c.env.KV;
+  if (kv) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, record.pluginId).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -755,6 +798,8 @@ apiRoutes.put('/admin/media/:id/file', async (c) => {
   await c.env.MEDIA.put(record.d2Key, buffer, { httpMetadata: { contentType: file.type } });
   const now = new Date().toISOString();
   await db.update(media).set({ filename: file.name, mimeType: file.type, sizeBytes: file.size }).where(eq(media.id, id)).run();
+  const kvMedia = c.env.KV;
+  if (kvMedia) c.executionCtx.waitUntil(kvInvalidatePluginData(kvMedia, record.pluginId).catch(() => {}));
   return c.json({ ok: true, url: `/media/${record.d2Key}` });
 });
 
@@ -807,6 +852,8 @@ apiRoutes.put('/admin/translations', async (c) => {
       await db.insert(translations).values({ pluginId: item.pluginId, key: item.key, locale: item.locale, value: item.value, updatedAt: now }).run();
     }
   }
+  const kvTrans = c.env.KV;
+  if (kvTrans) c.executionCtx.waitUntil(kvInvalidatePluginData(kvTrans, body.pluginId).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -893,6 +940,8 @@ apiRoutes.delete('/admin/translations', async (c) => {
   await db.delete(translations)
     .where(and(eq(translations.pluginId, body.pluginId), eq(translations.key, body.key)))
     .run();
+  const kvDelTrans = c.env.KV;
+  if (kvDelTrans) c.executionCtx.waitUntil(kvInvalidatePluginData(kvDelTrans, body.pluginId).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -1345,6 +1394,8 @@ apiRoutes.post('/admin/extensions/:id/update-from-url', async (c) => {
   }).where(eq(extensions.id, id)).run();
   await deleteExtI18n(db, row.slug);
   if (m.i18nStrings && Object.keys(m.i18nStrings).length > 0) await syncExtI18n(db, row.slug, m.i18nStrings);
+  const kvUpdateUrl = c.env.KV;
+  if (kvUpdateUrl) c.executionCtx.waitUntil(kvUpdateUrl.delete(KV_EXTENSIONS_KEY).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -1404,6 +1455,8 @@ apiRoutes.post('/admin/extensions', async (c) => {
       }).catch(() => undefined)
     );
   }
+  const kvExtInstall = c.env.KV;
+  if (kvExtInstall) c.executionCtx.waitUntil(kvExtInstall.delete(KV_EXTENSIONS_KEY).catch(() => {}));
   return c.json({ ok: true, id: row.id });
 });
 
@@ -1458,6 +1511,8 @@ apiRoutes.put('/admin/extensions/:id', async (c) => {
       await syncExtI18n(db, current.slug, body.i18n);
     }
   }
+  const kvExtPut = c.env.KV;
+  if (kvExtPut) c.executionCtx.waitUntil(kvExtPut.delete(KV_EXTENSIONS_KEY).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -1469,6 +1524,8 @@ apiRoutes.put('/admin/extensions/:id/toggle', async (c) => {
   if (!row) return c.json({ error: 'Not found' }, 404);
   const newEnabled = row.enabled ? 0 : 1;
   await db.update(extensions).set({ enabled: newEnabled, updatedAt: new Date().toISOString() }).where(eq(extensions.id, id)).run();
+  const kvExtToggle = c.env.KV;
+  if (kvExtToggle) c.executionCtx.waitUntil(kvExtToggle.delete(KV_EXTENSIONS_KEY).catch(() => {}));
   return c.json({ ok: true, enabled: newEnabled });
 });
 
@@ -1478,8 +1535,9 @@ apiRoutes.delete('/admin/extensions/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const row = await db.select({ slug: extensions.slug }).from(extensions).where(eq(extensions.id, id)).get();
   await db.delete(extensions).where(eq(extensions.id, id)).run();
-  // Clean up i18n strings from translations table
   if (row) await deleteExtI18n(db, row.slug);
+  const kvExtDel = c.env.KV;
+  if (kvExtDel) c.executionCtx.waitUntil(kvExtDel.delete(KV_EXTENSIONS_KEY).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -1516,5 +1574,7 @@ apiRoutes.put('/admin/extensions/:id/i18n', async (c) => {
   if (Object.keys(body.i18n).length > 0) {
     await syncExtI18n(db, current.slug, body.i18n);
   }
+  const kvExtI18n = c.env.KV;
+  if (kvExtI18n) c.executionCtx.waitUntil(kvExtI18n.delete(KV_EXTENSIONS_KEY).catch(() => {}));
   return c.json({ ok: true });
 });

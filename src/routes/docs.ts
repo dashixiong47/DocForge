@@ -6,13 +6,27 @@ import type { TranslationsMap, MediaMap } from '../templates/doc_page';
 import { notFoundPage } from '../templates/error_pages';
 import { getSettingsMap } from '../services/settings';
 import { loadEnabledExtensions, buildExtensionHead, buildExtensionHtmlTemplates, buildExtensionScripts, buildExtensionI18nInject, buildExtensionMediaInject, buildDocTransInject } from '../services/extensions';
+import {
+  KV_PLUGIN_SLUG_PREFIX,
+  KV_PLUGIN_ID_SLUG_PREFIX,
+  KV_PLUGIN_DATA_PREFIX,
+  KV_PLUGIN_TTL,
+} from '../services/kv';
 import type { AppType } from '../types';
 
 type SectionRow = typeof sections.$inferSelect;
 type ContentBlockRow = typeof contentBlocks.$inferSelect;
+type PluginRow = typeof plugins.$inferSelect;
 
 interface SectionWithChildren extends SectionRow {
   children: SectionRow[];
+}
+
+interface PluginDataBundle {
+  allSections: SectionRow[];
+  allBlocks: ContentBlockRow[];
+  transRows: Array<{ key: string; locale: string; value: string }>;
+  mediaRows: Array<{ placeholderKey: string | null; d2Key: string; altText: string | null; mimeType: string }>;
 }
 
 function getLang(c: { req: { header: (k: string) => string | undefined } }): string {
@@ -28,8 +42,7 @@ function clientIp(c: { req: { header: (k: string) => string | undefined } }): st
     || '';
 }
 
-async function loadTranslations(db: ReturnType<typeof import('../db').createDB>, pluginId: number): Promise<TranslationsMap> {
-  const rows = await db.select().from(translations).where(eq(translations.pluginId, pluginId)).all();
+function buildTranslationsMap(rows: Array<{ key: string; locale: string; value: string }>): TranslationsMap {
   const map: TranslationsMap = new Map();
   for (const row of rows) {
     if (!map.has(row.key)) map.set(row.key, {});
@@ -38,11 +51,7 @@ async function loadTranslations(db: ReturnType<typeof import('../db').createDB>,
   return map;
 }
 
-async function loadMediaMap(db: ReturnType<typeof import('../db').createDB>, pluginId: number): Promise<MediaMap> {
-  const rows = await db.select()
-    .from(media)
-    .where(eq(media.pluginId, pluginId))
-    .all();
+function buildMediaMap(rows: Array<{ placeholderKey: string | null; d2Key: string; altText: string | null; mimeType: string }>): MediaMap {
   const map: MediaMap = new Map();
   for (const row of rows) {
     if (row.placeholderKey) {
@@ -56,50 +65,9 @@ async function loadMediaMap(db: ReturnType<typeof import('../db').createDB>, plu
   return map;
 }
 
-export const docsRoutes = new Hono<AppType>();
-
-function normalizeSlugAlias(slug: string): string {
-  return slug.trim().toLowerCase().replace(/[-_]/g, '');
-}
-
-docsRoutes.get('/:slug', async (c) => {
-  const slug = c.req.param('slug');
-  const normalizedSlug = normalizeSlugAlias(slug);
-  const db = c.get('db');
-  const lang = getLang(c);
-
-  // Prefer exact case-insensitive match, then allow hyphen/underscore/no-separator aliases.
-  let plugin = await db.select().from(plugins)
-    .where(sql`lower(${plugins.slug}) = lower(${slug})`)
-    .get();
-  if (!plugin) {
-    plugin = await db.select().from(plugins)
-      .where(sql`lower(replace(replace(${plugins.slug}, '-', ''), '_', '')) = ${normalizedSlug}`)
-      .get();
-  }
-  if (!plugin || !plugin.enabled) return c.html(notFoundPage(slug));
-
-  c.executionCtx.waitUntil(
-    db.insert(analyticsEvents).values({
-      pluginId: plugin.id,
-      pluginSlug: plugin.slug,
-      path: c.req.path,
-      ip: clientIp(c),
-      country: c.req.header('CF-IPCountry') || '',
-      userAgent: c.req.header('User-Agent') || '',
-      createdAt: new Date().toISOString(),
-    }).run().catch(() => undefined)
-  );
-
-  const allSections = await db.select()
-    .from(sections)
-    .where(eq(sections.pluginId, plugin.id))
-    .orderBy(asc(sections.sortOrder))
-    .all();
-
+function buildSectionTree(allSections: SectionRow[]): SectionWithChildren[] {
   const topSections: SectionWithChildren[] = [];
   const parentMap = new Map<number, SectionWithChildren>();
-
   for (const s of allSections) {
     if (!s.parentId) {
       const sec: SectionWithChildren = { ...s, children: [] };
@@ -116,30 +84,133 @@ docsRoutes.get('/:slug', async (c) => {
     sec.children.sort((a, b) => a.sortOrder - b.sortOrder);
   }
   topSections.sort((a, b) => a.sortOrder - b.sortOrder);
+  return topSections;
+}
 
-  const sectionIds = allSections.map(s => s.id);
-  const allBlocks: ContentBlockRow[] = sectionIds.length > 0
-    ? await db.select()
-        .from(contentBlocks)
-        .where(inArray(contentBlocks.sectionId, sectionIds))
-        .orderBy(asc(contentBlocks.sortOrder))
-        .all()
-    : [];
-
-  const blocksBySection = new Map<number, ContentBlockRow[]>();
+function buildBlocksBySection(allBlocks: ContentBlockRow[]): Map<number, ContentBlockRow[]> {
+  const map = new Map<number, ContentBlockRow[]>();
   for (const b of allBlocks) {
-    if (!blocksBySection.has(b.sectionId)) blocksBySection.set(b.sectionId, []);
-    blocksBySection.get(b.sectionId)!.push(b);
+    if (!map.has(b.sectionId)) map.set(b.sectionId, []);
+    map.get(b.sectionId)!.push(b);
+  }
+  return map;
+}
+
+export const docsRoutes = new Hono<AppType>();
+
+function normalizeSlugAlias(slug: string): string {
+  return slug.trim().toLowerCase().replace(/[-_]/g, '');
+}
+
+docsRoutes.get('/:slug', async (c) => {
+  const slug = c.req.param('slug');
+  const normalizedSlug = normalizeSlugAlias(slug);
+  const db = c.get('db');
+  const kv = c.env.KV;
+  const lang = getLang(c);
+
+  // ── KV: try plugin record cache ──
+  let plugin: PluginRow | null = null;
+  if (kv) {
+    const raw = await kv.get(KV_PLUGIN_SLUG_PREFIX + normalizedSlug);
+    if (raw) {
+      try { plugin = JSON.parse(raw); } catch {}
+    }
   }
 
-  const [settings, t, mediaMap, enabledExts] = await Promise.all([
-    getSettingsMap(db),
-    loadTranslations(db, plugin.id),
-    loadMediaMap(db, plugin.id),
-    loadEnabledExtensions(db),
+  // ── D1 fallback for plugin lookup ──
+  if (!plugin) {
+    plugin = await db.select().from(plugins)
+      .where(sql`lower(${plugins.slug}) = lower(${slug})`)
+      .get() ?? null;
+    if (!plugin) {
+      plugin = await db.select().from(plugins)
+        .where(sql`lower(replace(replace(${plugins.slug}, '-', ''), '_', '')) = ${normalizedSlug}`)
+        .get() ?? null;
+    }
+    if (plugin && kv) {
+      const ns = normalizeSlugAlias(plugin.slug);
+      kv.put(KV_PLUGIN_SLUG_PREFIX + ns, JSON.stringify(plugin), { expirationTtl: KV_PLUGIN_TTL }).catch(() => {});
+      kv.put(KV_PLUGIN_ID_SLUG_PREFIX + plugin.id, ns, { expirationTtl: KV_PLUGIN_TTL }).catch(() => {});
+    }
+  }
+
+  if (!plugin || !plugin.enabled) return c.html(notFoundPage(slug));
+
+  c.executionCtx.waitUntil(
+    db.insert(analyticsEvents).values({
+      pluginId: plugin.id,
+      pluginSlug: plugin.slug,
+      path: c.req.path,
+      ip: clientIp(c),
+      country: c.req.header('CF-IPCountry') || '',
+      userAgent: c.req.header('User-Agent') || '',
+      createdAt: new Date().toISOString(),
+    }).run().catch(() => undefined)
+  );
+
+  // ── KV: try plugin data bundle ──
+  let allSections: SectionRow[] = [];
+  let allBlocks: ContentBlockRow[] = [];
+  let t: TranslationsMap = new Map();
+  let mediaMap: MediaMap = new Map();
+
+  let bundleLoaded = false;
+  if (kv) {
+    const rawBundle = await kv.get(KV_PLUGIN_DATA_PREFIX + plugin.id);
+    if (rawBundle) {
+      try {
+        const bundle: PluginDataBundle = JSON.parse(rawBundle);
+        allSections = bundle.allSections;
+        allBlocks = bundle.allBlocks;
+        t = buildTranslationsMap(bundle.transRows);
+        mediaMap = buildMediaMap(bundle.mediaRows);
+        bundleLoaded = true;
+      } catch {}
+    }
+  }
+
+  // ── D1 fallback for plugin data ──
+  if (!bundleLoaded) {
+    allSections = await db.select()
+      .from(sections)
+      .where(eq(sections.pluginId, plugin.id))
+      .orderBy(asc(sections.sortOrder))
+      .all();
+
+    const sectionIds = allSections.map(s => s.id);
+    allBlocks = sectionIds.length > 0
+      ? await db.select()
+          .from(contentBlocks)
+          .where(inArray(contentBlocks.sectionId, sectionIds))
+          .orderBy(asc(contentBlocks.sortOrder))
+          .all()
+      : [];
+
+    const [transRows, mediaRows] = await Promise.all([
+      db.select({ key: translations.key, locale: translations.locale, value: translations.value })
+        .from(translations).where(eq(translations.pluginId, plugin.id)).all(),
+      db.select({ placeholderKey: media.placeholderKey, d2Key: media.d2Key, altText: media.altText, mimeType: media.mimeType })
+        .from(media).where(eq(media.pluginId, plugin.id)).all(),
+    ]);
+
+    t = buildTranslationsMap(transRows);
+    mediaMap = buildMediaMap(mediaRows);
+
+    if (kv) {
+      const bundle: PluginDataBundle = { allSections, allBlocks, transRows, mediaRows };
+      kv.put(KV_PLUGIN_DATA_PREFIX + plugin.id, JSON.stringify(bundle), { expirationTtl: KV_PLUGIN_TTL }).catch(() => {});
+    }
+  }
+
+  const [settings, enabledExts] = await Promise.all([
+    getSettingsMap(db, kv),
+    loadEnabledExtensions(db, kv),
   ]);
 
-  // Collect locales that have at least one non-empty translation
+  const topSections = buildSectionTree(allSections);
+  const blocksBySection = buildBlocksBySection(allBlocks);
+
   const availableLocales = [...new Set(
     [...t.values()].flatMap(entry =>
       Object.entries(entry).filter(([, v]) => v.trim()).map(([k]) => k)
@@ -163,11 +234,12 @@ docsRoutes.get('/:slug', async (c) => {
 
 docsRoutes.get('/', async (c) => {
   const db = c.get('db');
+  const kv = c.env.KV;
   const lang = getLang(c);
   const [allPlugins, settings, enabledExts] = await Promise.all([
     db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'), eq(plugins.enabled, 1), eq(plugins.listed, 1))).orderBy(asc(plugins.sortOrder)).all(),
-    getSettingsMap(db),
-    loadEnabledExtensions(db),
+    getSettingsMap(db, kv),
+    loadEnabledExtensions(db, kv),
   ]);
   const pluginTranslations = new Map<number, TranslationsMap>();
   const pluginIds = allPlugins.map(p => p.id);
@@ -183,7 +255,6 @@ docsRoutes.get('/', async (c) => {
       map.get(row.key)![row.locale] = row.value;
     }
   }
-  // Collect available locales from system translations
   let availableLocales: string[] = ['zh', 'en'];
   const systemTranslations: TranslationsMap = new Map();
   const systemPlugin = await db.select().from(plugins).where(eq(plugins.slug, '__system__')).get();
