@@ -12,7 +12,7 @@ import {
   KV_PLUGIN_DATA_PREFIX,
   KV_PLUGIN_TTL,
 } from '../services/kv';
-import { staticKeyForSlug, R2_HOME_KEY } from '../services/static-pages';
+import { staticKeyForSlug, staticKeyForHome } from '../services/static-pages';
 import type { AppType } from '../types';
 
 type SectionRow = typeof sections.$inferSelect;
@@ -109,6 +109,7 @@ docsRoutes.get('/:slug', async (c) => {
   const activeVersion = c.req.query('v') || '';
   const db = c.get('db');
   const kv = c.env.KV;
+  const lang = getLang(c);
 
   // ── KV: try plugin record cache ──
   let plugin: PluginRow | null = null;
@@ -168,7 +169,7 @@ docsRoutes.get('/:slug', async (c) => {
   // ── Static: load settings early to check static_generation flag ──
   const settings = await getSettingsMap(db, kv);
   const staticEnabled = settings['plugin_static_' + canonicalSlug] !== '0';
-  const r2Key = staticKeyForSlug(canonicalSlug, activeVersion || undefined);
+  const r2Key = staticKeyForSlug(canonicalSlug, lang, activeVersion || undefined);
 
   if (staticEnabled && c.env.MEDIA) {
     const obj = await c.env.MEDIA.get(r2Key);
@@ -263,7 +264,6 @@ docsRoutes.get('/:slug', async (c) => {
 
   const enabledExts = await loadEnabledExtensions(db, kv);
 
-  const lang = getLang(c);
   const topSections = buildSectionTree(allSections);
   const blocksBySection = buildBlocksBySection(allBlocks);
 
@@ -300,11 +300,12 @@ docsRoutes.get('/', async (c) => {
   const kv = c.env.KV;
   const lang = getLang(c);
 
-  // Static: check R2 for home page
+  // Static: check R2 for home page (per-lang key)
   const homeSettings = await getSettingsMap(db, kv);
   const homeStaticEnabled = homeSettings.static_home !== '0';
+  const homeR2Key = staticKeyForHome(lang);
   if (homeStaticEnabled && c.env.MEDIA) {
-    const obj = await c.env.MEDIA.get(R2_HOME_KEY);
+    const obj = await c.env.MEDIA.get(homeR2Key);
     if (obj) return c.html(await obj.text());
   }
 
@@ -351,7 +352,7 @@ docsRoutes.get('/', async (c) => {
 
   if (homeStaticEnabled && c.env.MEDIA) {
     c.executionCtx.waitUntil(
-      c.env.MEDIA.put(R2_HOME_KEY, homeHtml, { httpMetadata: { contentType: 'text/html;charset=UTF-8' } }).catch(() => {})
+      c.env.MEDIA.put(homeR2Key, homeHtml, { httpMetadata: { contentType: 'text/html;charset=UTF-8' } }).catch(() => {})
     );
   }
 
