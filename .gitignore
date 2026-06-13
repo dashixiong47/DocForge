@@ -45,3 +45,6 @@ PrivatePlugins/
 .dev.vars
 !.dev.vars.example
 wrangler.local.toml
+
+# DB backups
+backup_*.sql
