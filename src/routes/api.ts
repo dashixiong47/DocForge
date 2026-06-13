@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
-import { eq, asc, count, and, ne, like, notLike, sql } from 'drizzle-orm';
+import { eq, asc, count, and, ne, like, notLike, sql, or, isNull } from 'drizzle-orm';
 import { analyticsEvents, plugins, sections, contentBlocks, media, siteSettings, admins, translations, extensions, extensionShareEvents } from '../db/schema';
 import { extensionManifest, validateManifest } from '../services/extensions';
 import { adminAuth } from '../services/auth';
 import { kvInvalidatePlugin, kvInvalidatePluginData, KV_SETTINGS_KEY, KV_EXTENSIONS_KEY } from '../services/kv';
+import { deleteStaticForSlug, deleteAllStatic } from '../services/static-pages';
 import type { AppType } from '../types';
 
 // ─── Extension i18n sync helpers ─────────────────────────────────────────────
@@ -385,6 +386,20 @@ async function syncPluginMetaTranslations(
   }
 }
 
+async function invalidateStaticForPlugin(
+  r2: R2Bucket,
+  db: ReturnType<typeof import('../db').createDB>,
+  pluginId: number,
+): Promise<void> {
+  const plugin = await db.select({ slug: plugins.slug, versionGroup: plugins.versionGroup })
+    .from(plugins).where(eq(plugins.id, pluginId)).get();
+  if (!plugin) return;
+  const canonicalSlug = (plugin.versionGroup && plugin.versionGroup !== plugin.slug)
+    ? plugin.versionGroup
+    : plugin.slug;
+  await deleteStaticForSlug(r2, canonicalSlug);
+}
+
 export const apiRoutes = new Hono<AppType>();
 
 // ─── Public: Language Preference ───
@@ -409,13 +424,19 @@ apiRoutes.use('/admin/*', async (c, next) => {
 // ─── Plugins CRUD ───
 apiRoutes.get('/admin/plugins', async (c) => {
   const db = c.get('db');
-  const all = await db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'))).orderBy(asc(plugins.sortOrder)).all();
+  const all = await db.select().from(plugins)
+    .where(and(
+      ne(plugins.slug, '__system__'),
+      notLike(plugins.slug, '__ext%'),
+      or(isNull(plugins.versionGroup), eq(plugins.versionGroup, plugins.slug)),
+    ))
+    .orderBy(asc(plugins.sortOrder)).all();
   return c.json(all);
 });
 
 apiRoutes.post('/admin/plugins', async (c) => {
   const db = c.get('db');
-  const body = await c.req.json<{ slug: string; name: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; enabled?: number | boolean; listed?: number | boolean }>();
+  const body = await c.req.json<{ slug: string; name: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; enabled?: number | boolean; listed?: number | boolean; versions?: string }>();
   const now = new Date().toISOString();
   const result = await db.insert(plugins).values({
     slug: body.slug,
@@ -428,6 +449,7 @@ apiRoutes.post('/admin/plugins', async (c) => {
     sortOrder: body.sortOrder || 0,
     enabled: body.enabled ? 1 : 0,
     listed: body.listed === false || body.listed === 0 ? 0 : 1,
+    versions: body.versions || '[]',
     createdAt: now,
     updatedAt: now,
   }).returning().get();
@@ -438,7 +460,7 @@ apiRoutes.post('/admin/plugins', async (c) => {
 apiRoutes.put('/admin/plugins/:id', async (c) => {
   const db = c.get('db');
   const id = Number(c.req.param('id'));
-  const body = await c.req.json<{ slug?: string; name?: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; enabled?: number | boolean; listed?: number | boolean; customCss?: string; customJs?: string }>();
+  const body = await c.req.json<{ slug?: string; name?: string; version?: string; compatibility?: string; description?: string; iconUrl?: string; badgeTags?: string; sortOrder?: number; enabled?: number | boolean; listed?: number | boolean; customCss?: string; customJs?: string; versions?: string }>();
   const now = new Date().toISOString();
   await db.update(plugins).set({
     ...(body.slug ? { slug: body.slug } : {}),
@@ -453,11 +475,13 @@ apiRoutes.put('/admin/plugins/:id', async (c) => {
     ...(body.listed !== undefined ? { listed: body.listed ? 1 : 0 } : {}),
     ...(body.customCss !== undefined ? { customCss: body.customCss } : {}),
     ...(body.customJs !== undefined ? { customJs: body.customJs } : {}),
+    ...(body.versions !== undefined ? { versions: body.versions } : {}),
     updatedAt: now,
   }).where(eq(plugins.id, id)).run();
   await syncPluginMetaTranslations(db, id, body);
   const kv = c.env.KV;
   if (kv) c.executionCtx.waitUntil(kvInvalidatePlugin(kv, id).catch(() => {}));
+  if (c.env.MEDIA) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, id).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -483,6 +507,108 @@ apiRoutes.put('/admin/plugins/:id/listed-toggle', async (c) => {
   const kv2 = c.env.KV;
   if (kv2) c.executionCtx.waitUntil(kvInvalidatePlugin(kv2, id).catch(() => {}));
   return c.json({ ok: true, listed: next });
+});
+
+// ─── Version siblings ───
+apiRoutes.get('/admin/plugins/:id/siblings', async (c) => {
+  const db = c.get('db');
+  const id = Number(c.req.param('id'));
+  const plugin = await db.select().from(plugins).where(eq(plugins.id, id)).get();
+  if (!plugin) return c.json({ error: 'not found' }, 404);
+  const canonicalSlug = plugin.versionGroup || plugin.slug;
+  const siblings = await db.select().from(plugins)
+    .where(eq(plugins.versionGroup, canonicalSlug))
+    .orderBy(asc(plugins.sortOrder))
+    .all();
+  return c.json(siblings);
+});
+
+apiRoutes.post('/admin/plugins/:id/fork-version', async (c) => {
+  const db = c.get('db');
+  const id = Number(c.req.param('id'));
+  const body = await c.req.json<{ version: string }>();
+  if (!body.version) return c.json({ error: 'version required' }, 400);
+  const canon = await db.select().from(plugins).where(eq(plugins.id, id)).get();
+  if (!canon) return c.json({ error: 'not found' }, 404);
+  const now = new Date().toISOString();
+  const canonicalSlug = canon.slug;
+  if (!canon.versionGroup) {
+    await db.update(plugins).set({ versionGroup: canonicalSlug, updatedAt: now }).where(eq(plugins.id, id)).run();
+  }
+  const vSlug = body.version.replace(/[^a-zA-Z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const forkSlug = `${canonicalSlug}-${vSlug}`;
+  const result = await db.insert(plugins).values({
+    slug: forkSlug,
+    name: canon.name,
+    version: body.version,
+    compatibility: canon.compatibility || '',
+    description: canon.description || '',
+    iconUrl: canon.iconUrl || '',
+    badgeTags: canon.badgeTags || '[]',
+    sortOrder: (canon.sortOrder || 0) + 1,
+    enabled: 0,
+    listed: 0,
+    versionGroup: canonicalSlug,
+    createdAt: now,
+    updatedAt: now,
+  }).returning().get();
+
+  // Copy sections and blocks from canonical to fork
+  const canonSections = await db.select().from(sections)
+    .where(eq(sections.pluginId, id))
+    .orderBy(asc(sections.sortOrder))
+    .all();
+  const sectionIdMap = new Map<number, number>(); // old id → new id
+  // First pass: create top-level sections
+  for (const s of canonSections.filter(s => !s.parentId)) {
+    const newSec = await db.insert(sections).values({
+      pluginId: result.id,
+      parentId: null,
+      titleEn: s.titleEn,
+      titleZh: s.titleZh,
+      slug: s.slug,
+      sortOrder: s.sortOrder,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+    sectionIdMap.set(s.id, newSec.id);
+  }
+  // Second pass: create child sections
+  for (const s of canonSections.filter(s => !!s.parentId)) {
+    const newParentId = sectionIdMap.get(s.parentId!) ?? null;
+    const newSec = await db.insert(sections).values({
+      pluginId: result.id,
+      parentId: newParentId,
+      titleEn: s.titleEn,
+      titleZh: s.titleZh,
+      slug: s.slug,
+      sortOrder: s.sortOrder,
+      createdAt: now,
+      updatedAt: now,
+    }).returning().get();
+    sectionIdMap.set(s.id, newSec.id);
+  }
+  // Copy content blocks
+  for (const [oldSecId, newSecId] of sectionIdMap) {
+    const blocks = await db.select().from(contentBlocks)
+      .where(eq(contentBlocks.sectionId, oldSecId))
+      .orderBy(asc(contentBlocks.sortOrder))
+      .all();
+    for (const b of blocks) {
+      await db.insert(contentBlocks).values({
+        sectionId: newSecId,
+        type: b.type,
+        contentJson: b.contentJson,
+        sortOrder: b.sortOrder,
+        createdAt: now,
+        updatedAt: now,
+      }).run();
+    }
+  }
+
+  const kv = c.env.KV;
+  if (kv) c.executionCtx.waitUntil(kvInvalidatePlugin(kv, id).catch(() => {}));
+  return c.json(result);
 });
 
 apiRoutes.delete('/admin/plugins/:id', async (c) => {
@@ -528,7 +654,7 @@ apiRoutes.post('/admin/sections', async (c) => {
 apiRoutes.put('/admin/sections/:id', async (c) => {
   const db = c.get('db');
   const id = Number(c.req.param('id'));
-  const body = await c.req.json<{ titleEn?: string; titleZh?: string; slug?: string; sortOrder?: number; parentId?: number | null }>();
+  const body = await c.req.json<{ titleEn?: string; titleZh?: string; slug?: string; sortOrder?: number; parentId?: number | null; visibleVersions?: string }>();
   const now = new Date().toISOString();
   const sec = await db.select({ pluginId: sections.pluginId }).from(sections).where(eq(sections.id, id)).get();
   await db.update(sections).set({
@@ -537,6 +663,7 @@ apiRoutes.put('/admin/sections/:id', async (c) => {
     ...(body.slug ? { slug: body.slug } : {}),
     ...(body.sortOrder !== undefined ? { sortOrder: body.sortOrder } : {}),
     ...(body.parentId !== undefined ? { parentId: body.parentId } : {}),
+    ...(body.visibleVersions !== undefined ? { visibleVersions: body.visibleVersions } : {}),
     updatedAt: now,
   }).where(eq(sections.id, id)).run();
   const kv = c.env.KV;
@@ -575,6 +702,7 @@ apiRoutes.put('/admin/sections/:id/blocks-bulk', async (c) => {
   }
   const kv = c.env.KV;
   if (kv && bulkSec) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, bulkSec.pluginId).catch(() => {}));
+  if (c.env.MEDIA && bulkSec) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, bulkSec.pluginId).catch(() => {}));
   return c.json({ ok: true, count: body.blocks.length });
 });
 
@@ -749,6 +877,7 @@ apiRoutes.put('/admin/settings', async (c) => {
   await syncSiteSettingTranslations(db, body);
   const kvSettings = c.env.KV;
   if (kvSettings) c.executionCtx.waitUntil(kvSettings.delete(KV_SETTINGS_KEY).catch(() => {}));
+  if (c.env.MEDIA) c.executionCtx.waitUntil(deleteAllStatic(c.env.MEDIA).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -854,6 +983,7 @@ apiRoutes.put('/admin/translations', async (c) => {
   }
   const kvTrans = c.env.KV;
   if (kvTrans) c.executionCtx.waitUntil(kvInvalidatePluginData(kvTrans, body.pluginId).catch(() => {}));
+  if (c.env.MEDIA) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, body.pluginId).catch(() => {}));
   return c.json({ ok: true });
 });
 

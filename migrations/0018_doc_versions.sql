@@ -1,0 +1,2 @@
+ALTER TABLE plugins ADD COLUMN versions TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE sections ADD COLUMN visible_versions TEXT NOT NULL DEFAULT '[]';

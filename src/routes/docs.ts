@@ -12,6 +12,7 @@ import {
   KV_PLUGIN_DATA_PREFIX,
   KV_PLUGIN_TTL,
 } from '../services/kv';
+import { staticKeyForSlug, R2_HOME_KEY } from '../services/static-pages';
 import type { AppType } from '../types';
 
 type SectionRow = typeof sections.$inferSelect;
@@ -105,9 +106,9 @@ function normalizeSlugAlias(slug: string): string {
 docsRoutes.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
   const normalizedSlug = normalizeSlugAlias(slug);
+  const activeVersion = c.req.query('v') || '';
   const db = c.get('db');
   const kv = c.env.KV;
-  const lang = getLang(c);
 
   // ── KV: try plugin record cache ──
   let plugin: PluginRow | null = null;
@@ -137,6 +138,56 @@ docsRoutes.get('/:slug', async (c) => {
 
   if (!plugin || !plugin.enabled) return c.html(notFoundPage(slug));
 
+  // If this is a version fork, redirect to canonical?v=
+  if (plugin.versionGroup && plugin.versionGroup !== plugin.slug) {
+    return c.redirect(`/${plugin.versionGroup}?v=${encodeURIComponent(plugin.version)}`, 301);
+  }
+
+  // Canonical slug = this plugin's slug (versionGroup may be null for legacy non-versioned docs)
+  const canonicalSlug = plugin.slug;
+  const versionGroupKey = plugin.versionGroup || plugin.slug;
+
+  // Load all enabled siblings (same versionGroup) to build version switcher
+  const siblings = await db.select().from(plugins)
+    .where(and(eq(plugins.versionGroup, versionGroupKey), eq(plugins.enabled, 1)))
+    .orderBy(asc(plugins.sortOrder))
+    .all();
+
+  // Switch to the appropriate sibling:
+  // - If ?v= given → match by version string
+  // - If no ?v= and siblings exist → default to newest (last in ascending sortOrder)
+  if (siblings.length > 0) {
+    if (activeVersion) {
+      const matched = siblings.find(s => s.version === activeVersion);
+      if (matched) plugin = matched;
+    } else {
+      plugin = siblings[siblings.length - 1];
+    }
+  }
+
+  // ── Static: load settings early to check static_generation flag ──
+  const settings = await getSettingsMap(db, kv);
+  const staticEnabled = settings['plugin_static_' + canonicalSlug] !== '0';
+  const r2Key = staticKeyForSlug(canonicalSlug, activeVersion || undefined);
+
+  if (staticEnabled && c.env.MEDIA) {
+    const obj = await c.env.MEDIA.get(r2Key);
+    if (obj) {
+      c.executionCtx.waitUntil(
+        db.insert(analyticsEvents).values({
+          pluginId: plugin.id,
+          pluginSlug: plugin.slug,
+          path: c.req.path,
+          ip: clientIp(c),
+          country: c.req.header('CF-IPCountry') || '',
+          userAgent: c.req.header('User-Agent') || '',
+          createdAt: new Date().toISOString(),
+        }).run().catch(() => undefined)
+      );
+      return c.html(await obj.text());
+    }
+  }
+
   c.executionCtx.waitUntil(
     db.insert(analyticsEvents).values({
       pluginId: plugin.id,
@@ -149,7 +200,6 @@ docsRoutes.get('/:slug', async (c) => {
     }).run().catch(() => undefined)
   );
 
-  // ── KV: try plugin data bundle ──
   let allSections: SectionRow[] = [];
   let allBlocks: ContentBlockRow[] = [];
   let t: TranslationsMap = new Map();
@@ -170,7 +220,6 @@ docsRoutes.get('/:slug', async (c) => {
     }
   }
 
-  // ── D1 fallback for plugin data ──
   if (!bundleLoaded) {
     allSections = await db.select()
       .from(sections)
@@ -178,7 +227,7 @@ docsRoutes.get('/:slug', async (c) => {
       .orderBy(asc(sections.sortOrder))
       .all();
 
-    const sectionIds = allSections.map(s => s.id);
+    const sectionIds = allSections.map((s: SectionRow) => s.id);
     allBlocks = sectionIds.length > 0
       ? await db.select()
           .from(contentBlocks)
@@ -203,11 +252,18 @@ docsRoutes.get('/:slug', async (c) => {
     }
   }
 
-  const [settings, enabledExts] = await Promise.all([
-    getSettingsMap(db, kv),
-    loadEnabledExtensions(db, kv),
-  ]);
+  // Build version switcher — only meaningful when multiple sibling versions exist; newest first
+  const availableVersions = siblings.length > 1
+    ? [...siblings].reverse().filter(s => s.version).map(s => ({
+        version: s.version,
+        url: `/${canonicalSlug}?v=${encodeURIComponent(s.version)}`,
+        isCurrent: s.id === plugin!.id,
+      }))
+    : [];
 
+  const enabledExts = await loadEnabledExtensions(db, kv);
+
+  const lang = getLang(c);
   const topSections = buildSectionTree(allSections);
   const blocksBySection = buildBlocksBySection(allBlocks);
 
@@ -221,7 +277,7 @@ docsRoutes.get('/:slug', async (c) => {
 
   const html = docPage.docLayout({
     plugin, sections: topSections, blocksBySection, settings, lang,
-    translations: t, mediaMap, availableLocales,
+    translations: t, mediaMap, availableLocales, availableVersions,
     extHeadHtml:      buildExtensionHead(enabledExts, lang, mediaMap),
     extI18nHtml:      buildExtensionI18nInject(enabledExts),
     extMediaHtml:     buildExtensionMediaInject(mediaMap),
@@ -229,6 +285,13 @@ docsRoutes.get('/:slug', async (c) => {
     extDocTransHtml:  buildDocTransInject(t, lang),
     extScriptsHtml:   buildExtensionScripts(enabledExts),
   });
+
+  if (staticEnabled && c.env.MEDIA) {
+    c.executionCtx.waitUntil(
+      c.env.MEDIA.put(r2Key, html, { httpMetadata: { contentType: 'text/html;charset=UTF-8' } }).catch(() => {})
+    );
+  }
+
   return c.html(html);
 });
 
@@ -236,11 +299,20 @@ docsRoutes.get('/', async (c) => {
   const db = c.get('db');
   const kv = c.env.KV;
   const lang = getLang(c);
-  const [allPlugins, settings, enabledExts] = await Promise.all([
+
+  // Static: check R2 for home page
+  const homeSettings = await getSettingsMap(db, kv);
+  const homeStaticEnabled = homeSettings.static_home !== '0';
+  if (homeStaticEnabled && c.env.MEDIA) {
+    const obj = await c.env.MEDIA.get(R2_HOME_KEY);
+    if (obj) return c.html(await obj.text());
+  }
+
+  const [allPlugins, enabledExts] = await Promise.all([
     db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'), eq(plugins.enabled, 1), eq(plugins.listed, 1))).orderBy(asc(plugins.sortOrder)).all(),
-    getSettingsMap(db, kv),
     loadEnabledExtensions(db, kv),
   ]);
+  const settings = homeSettings;
   const pluginTranslations = new Map<number, TranslationsMap>();
   const pluginIds = allPlugins.map(p => p.id);
   if (pluginIds.length > 0) {
@@ -268,12 +340,20 @@ docsRoutes.get('/', async (c) => {
     const locs = [...new Set(locRows.map(r => r.locale))].filter(Boolean);
     if (locs.length > 0) availableLocales = locs;
   }
-  return c.html(docPage.home({
+  const homeHtml = docPage.home({
     plugins: allPlugins, settings, lang, availableLocales, pluginTranslations, systemTranslations,
     extHeadHtml:    buildExtensionHead(enabledExts, lang),
     extI18nHtml:    buildExtensionI18nInject(enabledExts),
     extMediaHtml:   '',
     extTemplatesHtml: buildExtensionHtmlTemplates(enabledExts, lang),
     extScriptsHtml: buildExtensionScripts(enabledExts),
-  }));
+  });
+
+  if (homeStaticEnabled && c.env.MEDIA) {
+    c.executionCtx.waitUntil(
+      c.env.MEDIA.put(R2_HOME_KEY, homeHtml, { httpMetadata: { contentType: 'text/html;charset=UTF-8' } }).catch(() => {})
+    );
+  }
+
+  return c.html(homeHtml);
 });

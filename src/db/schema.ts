@@ -14,6 +14,8 @@ export const plugins = sqliteTable('plugins', {
   listed: integer('listed').notNull().default(1),
   customCss: text('custom_css').default(''),
   customJs:  text('custom_js').default(''),
+  versionGroup: text('version_group'),
+  versions: text('versions').notNull().default('[]'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
@@ -26,6 +28,7 @@ export const sections = sqliteTable('sections', {
   titleZh: text('title_zh').notNull().default(''),
   slug: text('slug').notNull(),
   sortOrder: integer('sort_order').notNull().default(0),
+  visibleVersions: text('visible_versions').notNull().default('[]'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 }, (table) => ({

@@ -143,7 +143,8 @@ export function pluginEditor(
   plugin: any, allPlugins: any[], allSections: any[],
   activeSection: any | null, blocks: any[],
   editorTheme = '', customCss = '', customJs = '',
-  sysI18n: Record<string, { zh: string; en: string }> = {}
+  sysI18n: Record<string, { zh: string; en: string }> = {},
+  versionSiblings: any[] = [],
 ): string {
   const roots: any[] = [], childMap = new Map<number, any[]>();
   for (const s of allSections) {
@@ -162,7 +163,7 @@ export function pluginEditor(
       h += `<span class="si-lbl" data-zh="${esc(s.titleZh || s.slug)}" data-en="${esc(s.titleEn || s.slug)}">${esc(s.titleZh || s.slug)}</span>`;
       h += `</div>`;
     } else {
-      h += `<a href="?s=${s.id}" class="si${active ? ' active' : ''}">`;
+      h += `<a href="?s=${s.id}" class="si${active ? ' active' : ''}" data-visible-versions="${esc(s.visibleVersions || '[]')}">`;
       h += `<span class="si-ic">${active ? '▶' : '▷'}</span>`;
       h += `<span class="si-lbl" data-zh="${esc(s.titleZh || s.slug)}" data-en="${esc(s.titleEn || s.slug)}">${esc(s.titleZh || s.slug)}</span>`;
       h += `</a>`;
@@ -171,7 +172,7 @@ export function pluginEditor(
     h += `</div>`;
     for (const child of children) {
       const ca = child.id === activeSectionId;
-      h += `<a href="?s=${child.id}" class="si child${ca ? ' active' : ''}">`;
+      h += `<a href="?s=${child.id}" class="si child${ca ? ' active' : ''}" data-visible-versions="${esc(child.visibleVersions || '[]')}">`;
       h += `<span class="si-ic">${ca ? '▸' : '·'}</span>`;
       h += `<span class="si-lbl" data-zh="${esc(child.titleZh || child.slug)}" data-en="${esc(child.titleEn || child.slug)}">${esc(child.titleZh || child.slug)}</span>`;
       h += `</a>`;
@@ -206,6 +207,7 @@ export function pluginEditor(
 <!-- ── Topbar ── -->
 <div class="topbar">
   <span style="font-weight:700;color:var(--accent)">📁 ${esc(plugin.name)}</span>
+  <span style="font-size:11px;background:rgba(88,166,255,.12);color:var(--accent);border-radius:4px;padding:2px 7px;margin-left:2px">v${esc(plugin.version)}</span>
   <div class="t-right">
     <a href="/admin/plugins" class="btn btn-sm" style="color:var(--muted)" data-i18n="editor.back">← 文档列表</a>
     <select class="sel-theme" id="sel-theme" data-i18n-title="editor.theme" title="编辑器主题"></select>
@@ -235,6 +237,11 @@ export function pluginEditor(
         </select>
         <button class="btn btn-sm btn-ok icon-add" onclick="openInlinePanel('newdoc')" data-i18n-title="editor.newDoc" title="新建文档">+</button>
       </div>
+      ${versionSiblings.length > 1 ? `<div style="display:flex;gap:5px;align-items:center">
+        <select class="sel-theme" id="sel-ver-sibling" style="flex:1;font-size:12px;padding:5px 8px;min-width:0" title="切换版本">
+          ${[...versionSiblings].reverse().map((s: any) => `<option value="${s.id}" ${s.id === plugin.id ? 'selected' : ''}>v${esc(s.version)}${s.enabled ? '' : ' (禁用)'}</option>`).join('')}
+        </select>
+      </div>` : ''}
     </div>
     <div class="sb-hd">
       <span class="sb-lbl" data-i18n="editor.sections">章节</span>
@@ -441,6 +448,7 @@ export function pluginEditor(
 var SECTION_ID = ${activeSection ? activeSection.id : 'null'};
 var SECTION_SLUG = '${esc(activeSection?.slug || '')}';
 var PLUGIN_ID = ${plugin.id};
+var _activeSecVisibleVersions = ${activeSection ? safeJSON(JSON.parse((activeSection as any).visibleVersions || '[]')) : '[]'};
 var INITIAL_TEXT = ${safeJSON(initialText)};
 var ALL_SECTIONS_COUNT = ${allSections.length};
 var ACTIVE_THEME = '${esc(activeTheme)}';
@@ -565,6 +573,10 @@ var selDoc = document.getElementById('sel-doc');
 if (selDoc) selDoc.addEventListener('change', function() {
   location.href = '/admin/plugins/' + this.value + '/editor';
 });
+var selVerSibling = document.getElementById('sel-ver-sibling');
+if (selVerSibling) selVerSibling.addEventListener('change', function() {
+  location.href = '/admin/plugins/' + this.value + '/editor';
+});
 
 // ── Active editor tab ─────────────────────────────────────────────────────────
 var ACTIVE_ED_TAB = 'html';
@@ -619,7 +631,12 @@ function openInlinePanel(panelName) {
   var modal = document.getElementById('modal-' + panelName);
   if (!modal) return;
   modal.classList.add('open');
-  var inp = modal.querySelector('input:not([type=hidden])');
+  if (panelName === 'secset') {
+    document.querySelectorAll('.ss-ver-cb').forEach(function(cb) {
+      cb.checked = _activeSecVisibleVersions.indexOf(cb.value) !== -1;
+    });
+  }
+  var inp = modal.querySelector('input:not([type=hidden]):not([type=checkbox])');
   if (inp) setTimeout(function() { inp.focus(); }, 50);
 }
 
@@ -686,6 +703,7 @@ async function _loadSection(sid, clk) {
     });
     var ss = document.getElementById('ss-title'), sk = document.getElementById('ss-slug');
     if (ss) ss.value = sec.titleZh || ''; if (sk) sk.value = sec.slug || '';
+    try { _activeSecVisibleVersions = JSON.parse(sec.visibleVersions || '[]'); } catch(e) { _activeSecVisibleVersions = []; }
     var ph = document.getElementById('ed-placeholder'); if (ph) ph.style.display = 'none';
     edHTML.setReadOnly(false);
     edHTML.setValue(blocksToText(blks), -1);
@@ -1182,8 +1200,10 @@ async function doAddSection(pid) {
 async function doSaveSecSettings() {
   var title = document.getElementById('ss-title').value.trim(), slug = document.getElementById('ss-slug').value.trim();
   if (!title || !slug) { showToast('请填写', 'err'); return; }
-  var r = await fetch('/api/admin/sections/${activeSection?.id || 0}', {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({titleZh:title,titleEn:title,slug})});
-  if (r.ok) { closeInlinePanel(); location.reload(); } else showToast('保存失败', 'err');
+  var vv = [];
+  document.querySelectorAll('.ss-ver-cb:checked').forEach(function(cb) { vv.push(cb.value); });
+  var r = await fetch('/api/admin/sections/' + SECTION_ID, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({titleZh:title,titleEn:title,slug,visibleVersions:JSON.stringify(vv)})});
+  if (r.ok) { _activeSecVisibleVersions = vv; closeInlinePanel(); location.reload(); } else showToast('保存失败', 'err');
 }
 async function doDelSection() {
   if (!confirm('删除该章节及其所有内容？不可撤销。')) return;

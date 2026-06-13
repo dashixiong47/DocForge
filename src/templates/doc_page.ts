@@ -282,6 +282,7 @@ export function docLayout(params: {
   translations: TranslationsMap;
   mediaMap?: MediaMap;
   availableLocales?: string[];
+  availableVersions?: Array<{ version: string; url: string; isCurrent: boolean }>;
   extHeadHtml?: string;
   extScriptsHtml?: string;
   extI18nHtml?: string;
@@ -289,7 +290,7 @@ export function docLayout(params: {
   extTemplatesHtml?: string;
   extDocTransHtml?: string;
 }): string {
-  const { plugin, sections, blocksBySection, settings, lang, translations, mediaMap = new Map(), availableLocales = ['zh', 'en'], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '', extDocTransHtml = '' } = params;
+  const { plugin, sections, blocksBySection, settings, lang, translations, mediaMap = new Map(), availableLocales = ['zh', 'en'], availableVersions = [], extHeadHtml = '', extScriptsHtml = '', extI18nHtml = '', extMediaHtml = '', extTemplatesHtml = '', extDocTransHtml = '' } = params;
   const badgeTags = JSON.parse(plugin.badgeTags || '[]') as string[];
   const htmlLang = lang === 'zh' ? 'zh-CN' : lang;
   const docName = resolve(translations, 'meta.name', lang, plugin.name);
@@ -324,14 +325,15 @@ ${extMediaHtml}
 ${extTemplatesHtml}
 ${extDocTransHtml}
 <style>
-.doc-lp{position:relative;display:inline-block}
-.doc-lp-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-surface);color:var(--c-text);cursor:pointer;font:inherit;font-size:13px;white-space:nowrap}
-.doc-lp-btn:hover{border-color:var(--c-accent)}
-.doc-lp-menu{position:absolute;right:0;top:calc(100% + 6px);min-width:180px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:8px;z-index:999;list-style:none;margin:0;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none}
-.doc-lp-menu.open{display:block}
-.doc-lp-menu li{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:14px}
-.doc-lp-menu li:hover{background:rgba(88,166,255,.08);color:var(--c-accent)}
-.doc-lp-menu li.active{color:var(--c-accent);font-weight:600}
+.doc-lp,.doc-vp{position:relative;display:inline-block}
+.doc-lp-btn,.doc-vp-btn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-surface);color:var(--c-text);cursor:pointer;font:inherit;font-size:13px;white-space:nowrap}
+.doc-lp-btn:hover,.doc-vp-btn:hover{border-color:var(--c-accent)}
+.doc-lp-menu,.doc-vp-menu{position:absolute;right:0;top:calc(100% + 6px);min-width:160px;background:var(--c-surface);border:1px solid var(--c-border);border-radius:8px;z-index:999;list-style:none;margin:0;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none}
+.doc-lp-menu.open,.doc-vp-menu.open{display:block}
+.doc-lp-menu li,.doc-vp-menu li{display:flex;align-items:center;gap:8px;padding:8px 16px;cursor:pointer;font-size:14px}
+.doc-lp-menu li:hover,.doc-vp-menu li:hover{background:rgba(88,166,255,.08);color:var(--c-accent)}
+.doc-lp-menu li.active,.doc-vp-menu li.active{color:var(--c-accent);font-weight:600}
+.doc-vp-badge{display:inline-block;background:rgba(88,166,255,.12);color:var(--c-accent);border-radius:4px;padding:0 5px;font-size:11px;margin-left:auto}
 .code-block{border:1px solid var(--c-border);border-radius:var(--radius);background:var(--c-surface);box-shadow:var(--shadow-sm);overflow:hidden;margin:14px 0}
 .code-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-bottom:1px solid var(--c-border);background:rgba(13,17,23,.6)}
 .code-lang{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--c-muted);text-transform:uppercase;letter-spacing:.04em}
@@ -381,6 +383,19 @@ ${extDocTransHtml}
       });
     }
 
+    // Version picker
+    var dvpBtn=document.getElementById('doc-vp-btn');
+    var dvpMenu=document.getElementById('doc-vp-menu');
+    if(dvpBtn&&dvpMenu){
+      dvpBtn.addEventListener('click',function(e){e.stopPropagation();dvpMenu.classList.toggle('open');});
+      document.addEventListener('click',function(){dvpMenu.classList.remove('open');});
+      dvpMenu.querySelectorAll('li').forEach(function(li){
+        li.addEventListener('click',function(){
+          var url=li.dataset.url;
+          if(url&&url!==window.location.pathname)window.location.href=url;
+        });
+      });
+    }
     // Lang picker
     var dlpBtn=document.getElementById('doc-lp-btn');
     var dlpMenu=document.getElementById('doc-lp-menu');
@@ -487,6 +502,18 @@ ${extDocTransHtml}
       <span style="color:var(--c-muted);font-weight:400;font-size:14px"> ${docUI('nav.docs', lang)}</span>
     </div>
     <div class="topbar-actions">
+      ${availableVersions.length > 0 ? `<div class="doc-vp" id="doc-vp">
+        <button class="doc-vp-btn" id="doc-vp-btn" type="button">
+          <svg width="12" height="12" viewBox="0 0 16 16" style="opacity:.6"><path fill="currentColor" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 010-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1V9h-8c-.356 0-.694.074-1 .208V2.5a1 1 0 011-1h8z"/></svg>
+          <span id="doc-vp-name">${esc(plugin.version)}</span>
+          <svg width="10" height="10" viewBox="0 0 12 12" style="opacity:.5"><path d="M6 8L1 3h10z" fill="currentColor"/></svg>
+        </button>
+        <ul class="doc-vp-menu" id="doc-vp-menu">
+          ${availableVersions.map(v =>
+            `<li data-url="${esc(v.url)}"${v.isCurrent ? ' class="active"' : ''}>${esc(v.version)}${v.isCurrent ? '<span class="doc-vp-badge">current</span>' : ''}</li>`
+          ).join('')}
+        </ul>
+      </div>` : ''}
       <div class="doc-lp" id="doc-lp">
         <button class="doc-lp-btn" id="doc-lp-btn" type="button">
           ${flagSpan(lang)} <span id="doc-lp-name">${localeName(lang)}</span>
@@ -519,7 +546,7 @@ ${renderTOC(sections, translations, lang)}
 <main class="content">
 ${sections.length > 0
   ? renderSections(sections, blocksBySection, translations, mediaMap, lang)
-  : `<div style="padding:40px;text-align:center;color:var(--c-muted)"><p>${docUI('main.empty', lang)}</p></div>`}
+  : `<div style="display:flex;align-items:center;justify-content:center;min-height:300px;text-align:center;color:var(--c-muted)"><p>${docUI('main.empty', lang)}</p></div>`}
 </main>
 </div></div>
 

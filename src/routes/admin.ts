@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, asc, and, count, ne, notLike } from 'drizzle-orm';
+import { eq, asc, and, count, ne, notLike, or, isNull } from 'drizzle-orm';
 import { plugins, sections, contentBlocks, admins, translations } from '../db/schema';
 import { getSettingsMap } from '../services/settings';
 import { adminAuth } from '../services/auth';
@@ -194,8 +194,17 @@ adminRoutes.get('/', async (c) => {
 
 adminRoutes.get('/plugins', async (c) => {
   const db = c.get('db');
-  const all = await db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'))).orderBy(asc(plugins.sortOrder)).all();
-  return c.html(adminPage.plugins(all));
+  const [all, settings] = await Promise.all([
+    db.select().from(plugins)
+      .where(and(
+        ne(plugins.slug, '__system__'),
+        notLike(plugins.slug, '__ext%'),
+        or(isNull(plugins.versionGroup), eq(plugins.versionGroup, plugins.slug)),
+      ))
+      .orderBy(asc(plugins.sortOrder)).all(),
+    getSettingsMap(db),
+  ]);
+  return c.html(adminPage.plugins(all, settings));
 });
 
 adminRoutes.get('/plugins/:id/editor', async (c) => {
@@ -204,9 +213,17 @@ adminRoutes.get('/plugins/:id/editor', async (c) => {
   const db = c.get('db');
   const plugin = await db.select().from(plugins).where(eq(plugins.id, pluginId)).get();
   if (!plugin) return c.html(adminPage.notFound('Plugin not found'));
-  const [allPlugins, allSections] = await Promise.all([
-    db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'))).orderBy(asc(plugins.sortOrder)).all(),
+  const vg = (plugin as any).versionGroup || plugin.slug;
+  const [allPlugins, allSections, versionSiblings] = await Promise.all([
+    db.select().from(plugins)
+      .where(and(
+        ne(plugins.slug, '__system__'),
+        notLike(plugins.slug, '__ext%'),
+        or(isNull(plugins.versionGroup), eq(plugins.versionGroup, plugins.slug)),
+      ))
+      .orderBy(asc(plugins.sortOrder)).all(),
     db.select().from(sections).where(eq(sections.pluginId, pluginId)).orderBy(asc(sections.sortOrder)).all(),
+    db.select().from(plugins).where(eq(plugins.versionGroup, vg)).orderBy(asc(plugins.sortOrder)).all(),
   ]);
   let activeSection: (typeof allSections)[0] | null = null;
   let blockList: any[] = [];
@@ -234,6 +251,7 @@ adminRoutes.get('/plugins/:id/editor', async (c) => {
     plugin.customCss || '',
     (plugin as any).customJs || '',
     c.get('sysI18n') || {},
+    versionSiblings,
   ));
 });
 

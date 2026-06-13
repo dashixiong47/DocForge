@@ -1,0 +1,1 @@
+ALTER TABLE plugins ADD COLUMN version_group TEXT DEFAULT NULL;
