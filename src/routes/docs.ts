@@ -12,7 +12,7 @@ import {
   KV_PLUGIN_DATA_PREFIX,
   KV_PLUGIN_TTL,
 } from '../services/kv';
-import { staticKeyForSlug, staticKeyForHome } from '../services/static-pages';
+import { staticKeyForSlug, staticKeyForHome, edgeCacheKeyUrl } from '../services/static-pages';
 import type { AppType } from '../types';
 
 type SectionRow = typeof sections.$inferSelect;
@@ -170,36 +170,47 @@ docsRoutes.get('/:slug', async (c) => {
   const settings = await getSettingsMap(db, kv);
   const staticEnabled = settings['plugin_static_' + canonicalSlug] !== '0';
   const r2Key = staticKeyForSlug(canonicalSlug, lang, activeVersion || undefined);
+  const origin = new URL(c.req.url).origin;
+  const eckUrl = edgeCacheKeyUrl(origin, c.req.path, lang) + (activeVersion ? `&__v=${encodeURIComponent(activeVersion)}` : '');
+  const edgeCache = typeof caches !== 'undefined' ? (caches as unknown as CacheStorage).default : null;
 
-  if (staticEnabled && c.env.MEDIA) {
-    const obj = await c.env.MEDIA.get(r2Key);
-    if (obj) {
-      c.executionCtx.waitUntil(
-        db.insert(analyticsEvents).values({
-          pluginId: plugin.id,
-          pluginSlug: plugin.slug,
-          path: c.req.path,
-          ip: clientIp(c),
-          country: c.req.header('CF-IPCountry') || '',
-          userAgent: c.req.header('User-Agent') || '',
-          createdAt: new Date().toISOString(),
-        }).run().catch(() => undefined)
-      );
-      return c.html(await obj.text());
+  const analyticsTask = db.insert(analyticsEvents).values({
+    pluginId: plugin.id,
+    pluginSlug: plugin.slug,
+    path: c.req.path,
+    ip: clientIp(c),
+    country: c.req.header('CF-IPCountry') || '',
+    userAgent: c.req.header('User-Agent') || '',
+    createdAt: new Date().toISOString(),
+  }).run().catch(() => undefined);
+
+  if (staticEnabled) {
+    // Layer 1: Edge cache (PoP-local, ~0ms within same datacenter)
+    if (edgeCache) {
+      const cached = await edgeCache.match(new Request(eckUrl)).catch(() => null);
+      if (cached) {
+        c.executionCtx.waitUntil(analyticsTask);
+        return new Response(await cached.text(), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+      }
+    }
+
+    // Layer 2: R2 (persistent across PoPs, warms edge cache for next request)
+    if (c.env.MEDIA) {
+      const obj = await c.env.MEDIA.get(r2Key);
+      if (obj) {
+        const html = await obj.text();
+        c.executionCtx.waitUntil(Promise.all([
+          analyticsTask,
+          edgeCache ? edgeCache.put(new Request(eckUrl), new Response(html, {
+            headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'public, max-age=60' },
+          })).catch(() => {}) : Promise.resolve(),
+        ]));
+        return c.html(html);
+      }
     }
   }
 
-  c.executionCtx.waitUntil(
-    db.insert(analyticsEvents).values({
-      pluginId: plugin.id,
-      pluginSlug: plugin.slug,
-      path: c.req.path,
-      ip: clientIp(c),
-      country: c.req.header('CF-IPCountry') || '',
-      userAgent: c.req.header('User-Agent') || '',
-      createdAt: new Date().toISOString(),
-    }).run().catch(() => undefined)
-  );
+  c.executionCtx.waitUntil(analyticsTask);
 
   let allSections: SectionRow[] = [];
   let allBlocks: ContentBlockRow[] = [];
@@ -286,10 +297,18 @@ docsRoutes.get('/:slug', async (c) => {
     extScriptsHtml:   buildExtensionScripts(enabledExts),
   });
 
-  if (staticEnabled && c.env.MEDIA) {
-    c.executionCtx.waitUntil(
-      c.env.MEDIA.put(r2Key, html, { httpMetadata: { contentType: 'text/html;charset=UTF-8' } }).catch(() => {})
-    );
+  // Layer 3 fallback: SSR complete — write to R2 + edge cache in background
+  if (staticEnabled) {
+    const writeTasks: Promise<unknown>[] = [];
+    if (c.env.MEDIA) {
+      writeTasks.push(c.env.MEDIA.put(r2Key, html, { httpMetadata: { contentType: 'text/html;charset=UTF-8' } }).catch(() => {}));
+    }
+    if (edgeCache) {
+      writeTasks.push(edgeCache.put(new Request(eckUrl), new Response(html, {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'public, max-age=60' },
+      })).catch(() => {}));
+    }
+    c.executionCtx.waitUntil(Promise.all(writeTasks));
   }
 
   return c.html(html);
@@ -300,13 +319,32 @@ docsRoutes.get('/', async (c) => {
   const kv = c.env.KV;
   const lang = getLang(c);
 
-  // Static: check R2 for home page (per-lang key)
   const homeSettings = await getSettingsMap(db, kv);
   const homeStaticEnabled = homeSettings.static_home !== '0';
   const homeR2Key = staticKeyForHome(lang);
-  if (homeStaticEnabled && c.env.MEDIA) {
-    const obj = await c.env.MEDIA.get(homeR2Key);
-    if (obj) return c.html(await obj.text());
+  const homeOrigin = new URL(c.req.url).origin;
+  const homeEckUrl = edgeCacheKeyUrl(homeOrigin, '/', lang);
+  const homeEdgeCache = typeof caches !== 'undefined' ? (caches as unknown as CacheStorage).default : null;
+
+  if (homeStaticEnabled) {
+    // Layer 1: Edge cache
+    if (homeEdgeCache) {
+      const cached = await homeEdgeCache.match(new Request(homeEckUrl)).catch(() => null);
+      if (cached) return new Response(await cached.text(), { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
+    }
+    // Layer 2: R2
+    if (c.env.MEDIA) {
+      const obj = await c.env.MEDIA.get(homeR2Key);
+      if (obj) {
+        const html = await obj.text();
+        if (homeEdgeCache) {
+          c.executionCtx.waitUntil(homeEdgeCache.put(new Request(homeEckUrl), new Response(html, {
+            headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'public, max-age=60' },
+          })).catch(() => {}));
+        }
+        return c.html(html);
+      }
+    }
   }
 
   const [allPlugins, enabledExts] = await Promise.all([
@@ -350,10 +388,17 @@ docsRoutes.get('/', async (c) => {
     extScriptsHtml: buildExtensionScripts(enabledExts),
   });
 
-  if (homeStaticEnabled && c.env.MEDIA) {
-    c.executionCtx.waitUntil(
-      c.env.MEDIA.put(homeR2Key, homeHtml, { httpMetadata: { contentType: 'text/html;charset=UTF-8' } }).catch(() => {})
-    );
+  if (homeStaticEnabled) {
+    const writeTasks: Promise<unknown>[] = [];
+    if (c.env.MEDIA) {
+      writeTasks.push(c.env.MEDIA.put(homeR2Key, homeHtml, { httpMetadata: { contentType: 'text/html;charset=UTF-8' } }).catch(() => {}));
+    }
+    if (homeEdgeCache) {
+      writeTasks.push(homeEdgeCache.put(new Request(homeEckUrl), new Response(homeHtml, {
+        headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'public, max-age=60' },
+      })).catch(() => {}));
+    }
+    c.executionCtx.waitUntil(Promise.all(writeTasks));
   }
 
   return c.html(homeHtml);

@@ -4,7 +4,7 @@ import { analyticsEvents, plugins, sections, contentBlocks, media, siteSettings,
 import { extensionManifest, validateManifest } from '../services/extensions';
 import { adminAuth } from '../services/auth';
 import { kvInvalidatePlugin, kvInvalidatePluginData, KV_SETTINGS_KEY, KV_EXTENSIONS_KEY } from '../services/kv';
-import { deleteStaticForSlug, deleteAllStatic } from '../services/static-pages';
+import { deleteStaticForSlug, deleteAllStatic, deleteEdgeCacheForSlug, deleteAllEdgeCache } from '../services/static-pages';
 import type { AppType } from '../types';
 
 // ─── Extension i18n sync helpers ─────────────────────────────────────────────
@@ -390,6 +390,7 @@ async function invalidateStaticForPlugin(
   r2: R2Bucket,
   db: ReturnType<typeof import('../db').createDB>,
   pluginId: number,
+  origin?: string,
 ): Promise<void> {
   const plugin = await db.select({ slug: plugins.slug, versionGroup: plugins.versionGroup })
     .from(plugins).where(eq(plugins.id, pluginId)).get();
@@ -397,7 +398,9 @@ async function invalidateStaticForPlugin(
   const canonicalSlug = (plugin.versionGroup && plugin.versionGroup !== plugin.slug)
     ? plugin.versionGroup
     : plugin.slug;
-  await deleteStaticForSlug(r2, canonicalSlug);
+  const tasks: Promise<void>[] = [deleteStaticForSlug(r2, canonicalSlug)];
+  if (origin) tasks.push(deleteEdgeCacheForSlug(origin, canonicalSlug));
+  await Promise.all(tasks);
 }
 
 export const apiRoutes = new Hono<AppType>();
@@ -481,7 +484,7 @@ apiRoutes.put('/admin/plugins/:id', async (c) => {
   await syncPluginMetaTranslations(db, id, body);
   const kv = c.env.KV;
   if (kv) c.executionCtx.waitUntil(kvInvalidatePlugin(kv, id).catch(() => {}));
-  if (c.env.MEDIA) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, id).catch(() => {}));
+  if (c.env.MEDIA) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, id, new URL(c.req.url).origin).catch(() => {}));
   return c.json({ ok: true });
 });
 
@@ -702,7 +705,7 @@ apiRoutes.put('/admin/sections/:id/blocks-bulk', async (c) => {
   }
   const kv = c.env.KV;
   if (kv && bulkSec) c.executionCtx.waitUntil(kvInvalidatePluginData(kv, bulkSec.pluginId).catch(() => {}));
-  if (c.env.MEDIA && bulkSec) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, bulkSec.pluginId).catch(() => {}));
+  if (c.env.MEDIA && bulkSec) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, bulkSec.pluginId, new URL(c.req.url).origin).catch(() => {}));
   return c.json({ ok: true, count: body.blocks.length });
 });
 
@@ -877,7 +880,14 @@ apiRoutes.put('/admin/settings', async (c) => {
   await syncSiteSettingTranslations(db, body);
   const kvSettings = c.env.KV;
   if (kvSettings) c.executionCtx.waitUntil(kvSettings.delete(KV_SETTINGS_KEY).catch(() => {}));
-  if (c.env.MEDIA) c.executionCtx.waitUntil(deleteAllStatic(c.env.MEDIA).catch(() => {}));
+  const settingsOrigin = new URL(c.req.url).origin;
+  if (c.env.MEDIA) {
+    const allSlugs = (await db.select({ slug: plugins.slug }).from(plugins).all()).map(p => p.slug);
+    c.executionCtx.waitUntil(Promise.all([
+      deleteAllStatic(c.env.MEDIA).catch(() => {}),
+      deleteAllEdgeCache(settingsOrigin, allSlugs).catch(() => {}),
+    ]));
+  }
   return c.json({ ok: true });
 });
 
@@ -983,7 +993,7 @@ apiRoutes.put('/admin/translations', async (c) => {
   }
   const kvTrans = c.env.KV;
   if (kvTrans) c.executionCtx.waitUntil(kvInvalidatePluginData(kvTrans, body.pluginId).catch(() => {}));
-  if (c.env.MEDIA) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, body.pluginId).catch(() => {}));
+  if (c.env.MEDIA) c.executionCtx.waitUntil(invalidateStaticForPlugin(c.env.MEDIA, db, body.pluginId, new URL(c.req.url).origin).catch(() => {}));
   return c.json({ ok: true });
 });
 
