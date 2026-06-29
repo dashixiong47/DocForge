@@ -71,6 +71,8 @@ interface Plugin {
   id: number; slug: string; name: string; version: string;
   compatibility: string; description: string | null; iconUrl: string | null;
   badgeTags: string | null; sortOrder: number; customCss?: string | null; customJs?: string | null;
+  homeSlug?: string;
+  homeUrl?: string;
 }
 
 interface Section {
@@ -836,12 +838,12 @@ document.addEventListener('DOMContentLoaded', function() {
       const displayName = resolve(metaTranslations, 'meta.name', lang, p.name);
       const displayDesc = resolve(metaTranslations, 'meta.description', lang, p.description || '');
       return `
-    <a href="/${esc(p.slug)}" class="plugin-card">
+    <a href="${esc(p.homeUrl || `/${p.homeSlug || p.slug}`)}" class="plugin-card">
       <div class="plugin-card-top">
         <div class="plugin-card-icon">${p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="" />` : '<span style="color:var(--c-accent)">&#9679;</span>'}</div>
         <div class="plugin-card-info">
           <h3>${esc(displayName)}</h3>
-          <p>/${esc(p.slug)}</p>
+          <p>/${esc(p.homeSlug || p.slug)}</p>
         </div>
       </div>
       <p class="plugin-card-desc">${esc(displayDesc)}</p>

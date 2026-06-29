@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { eq, asc, inArray, sql, ne, and, notLike } from 'drizzle-orm';
+import { eq, asc, inArray, sql, ne, and, notLike, or, isNull } from 'drizzle-orm';
 import { analyticsEvents, plugins, sections, contentBlocks, translations, media } from '../db/schema';
 import { docPage } from '../templates/doc_page';
 import type { TranslationsMap, MediaMap } from '../templates/doc_page';
@@ -347,13 +347,51 @@ docsRoutes.get('/', async (c) => {
     }
   }
 
-  const [allPlugins, enabledExts] = await Promise.all([
-    db.select().from(plugins).where(and(ne(plugins.slug, '__system__'), notLike(plugins.slug, '__ext%'), eq(plugins.enabled, 1), eq(plugins.listed, 1))).orderBy(asc(plugins.sortOrder)).all(),
+  const [listedCanonicalPlugins, enabledExts] = await Promise.all([
+    db.select().from(plugins)
+      .where(and(
+        ne(plugins.slug, '__system__'),
+        notLike(plugins.slug, '__ext%'),
+        eq(plugins.enabled, 1),
+        eq(plugins.listed, 1),
+        or(isNull(plugins.versionGroup), eq(plugins.versionGroup, plugins.slug)),
+      ))
+      .orderBy(asc(plugins.sortOrder)).all(),
     loadEnabledExtensions(db, kv),
   ]);
+  const canonicalIds = listedCanonicalPlugins.map(p => p.id);
+  const canonicalGroups = listedCanonicalPlugins.map(p => p.versionGroup || p.slug);
+  const allSiblings = canonicalGroups.length > 0
+    ? await db.select().from(plugins)
+      .where(and(
+        inArray(plugins.versionGroup, canonicalGroups),
+        eq(plugins.enabled, 1),
+      ))
+      .orderBy(asc(plugins.sortOrder)).all()
+    : [];
+  const siblingsByGroup = new Map<string, PluginRow[]>();
+  for (const sibling of allSiblings) {
+    const group = sibling.versionGroup || sibling.slug;
+    if (!siblingsByGroup.has(group)) siblingsByGroup.set(group, []);
+    siblingsByGroup.get(group)!.push(sibling);
+  }
+  const allPlugins = listedCanonicalPlugins.map((canonical) => {
+    const group = canonical.versionGroup || canonical.slug;
+    const siblings = siblingsByGroup.get(group) || [];
+    const latest = siblings.length > 0 ? siblings[siblings.length - 1] : canonical;
+    return {
+      ...latest,
+      sortOrder: canonical.sortOrder,
+      listed: canonical.listed,
+      homeSlug: canonical.slug,
+      homeUrl: latest.id === canonical.id
+        ? `/${canonical.slug}`
+        : `/${canonical.slug}?v=${encodeURIComponent(latest.version)}`,
+    };
+  });
   const settings = homeSettings;
   const pluginTranslations = new Map<number, TranslationsMap>();
-  const pluginIds = allPlugins.map(p => p.id);
+  const pluginIds = [...new Set([...canonicalIds, ...allPlugins.map(p => p.id)])];
   if (pluginIds.length > 0) {
     const metaRows = await db.select().from(translations)
       .where(inArray(translations.pluginId, pluginIds))
